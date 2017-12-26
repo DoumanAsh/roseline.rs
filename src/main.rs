@@ -1,5 +1,7 @@
 #[macro_use]
 extern crate lazy_static;
+#[macro_use]
+extern crate diesel;
 
 extern crate irc;
 extern crate tokio_core;
@@ -23,6 +25,13 @@ mod log;
 mod config;
 mod vndb;
 mod handlers;
+mod db;
+
+use db::{
+    Db,
+    RunQueryDsl,
+    QueryDsl
+};
 
 use utils::ResultExt;
 
@@ -39,6 +48,13 @@ macro_rules! try_in_loop {
 
 fn run() -> Result<i32, String> {
     let _log_guard = log::init();
+
+    let db = Db::new()?;
+    {
+        let vns_count = Db::vns().count().get_result::<i64>(&*db).format_err("Cannot count entries in vns")?;
+        let hooks_count = Db::hooks().count().get_result::<i64>(&*db).format_err("Cannot count entries in hooks")?;
+        info!("DB stats: VNs {} | Hooks {}", vns_count, hooks_count);
+    }
 
     let mut reactor = tokio_core::reactor::Core::new().format_err("Failed to init tokio loop")?;
     let tokio_handle = reactor.handle();
@@ -57,7 +73,7 @@ fn run() -> Result<i32, String> {
               config.port.as_ref().unwrap(),
               server.current_nickname());
 
-        let message_handler = handlers::MessageHandler::new(server.clone(), vndb_client.clone());
+        let message_handler = handlers::MessageHandler::new(server.clone(), vndb_client.clone(), db.clone());
         let server = server.stream().for_each(|message| {
             message_handler.dispatch(message)
         });

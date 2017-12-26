@@ -9,6 +9,7 @@ use ::irc::proto::message::Message;
 use ::irc::proto::command::Command;
 
 use ::vndb;
+use ::db::Db;
 
 type ReturnFuture = Box<Future<Item=(), Error=::irc::error::Error>>;
 
@@ -21,14 +22,16 @@ mod command;
 
 pub struct MessageHandler {
     server: IrcServer,
-    vndb: vndb::Client
+    vndb: vndb::Client,
+    db: Db
 }
 
 impl MessageHandler {
-    pub fn new(server: IrcServer, vndb: vndb::Client) -> Self {
+    pub fn new(server: IrcServer, vndb: vndb::Client, db: Db) -> Self {
         Self {
             server,
-            vndb
+            vndb,
+            db
         }
     }
 
@@ -63,7 +66,7 @@ impl MessageHandler {
         let server = self.server.clone();
         let from = from.unwrap().to_string();
         let is_private = self.is_private(&target);
-        let cmd = cmd.exec(self.vndb.clone())
+        let cmd = cmd.exec(self.vndb.clone(), self.db.clone())
                      .then(move |result| {
                          let result = match result {
                              Ok(command::CommandResult::Single(result)) => vec![result],

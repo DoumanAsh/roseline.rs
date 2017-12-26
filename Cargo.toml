@@ -19,6 +19,15 @@ slog-async = "2"
 slog-term = "2"
 slog-stdlog = "3"
 
+[dependencies.diesel]
+version = "1.0.0-rc1"
+default-features = false
+features = ["sqlite"]
+
+[dependencies.libsqlite3-sys]
+version = "0.8"
+features = ["bundled"]
+
 [dependencies.irc]
 version = "0"
 default-features = false
