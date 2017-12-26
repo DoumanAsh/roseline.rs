@@ -238,6 +238,11 @@ impl Client {
         }
     }
 
+    #[inline]
+    pub fn get_vn_by_id(&self, id: u64) -> VndbRequest {
+        self.get_by_id(message::request::get::Type::vn(), id)
+    }
+
     pub fn get_vn_by_filter(&self, filters: message::request::get::Filters) -> VndbRequest {
         let get: message::Request = message::request::Get {
             kind: message::request::get::Type::vn(),

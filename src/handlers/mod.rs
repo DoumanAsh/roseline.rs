@@ -18,6 +18,7 @@ pub fn future_ok() -> futures::future::FutureResult<(), ::irc::error::Error> {
     futures::future::ok(())
 }
 
+mod args;
 mod command;
 
 pub struct MessageHandler {

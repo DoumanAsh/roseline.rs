@@ -43,7 +43,6 @@ version = "2"
 default-features = false
 features = ["max_level_trace", "release_max_level_info"]
 
-#[dependencies.diesel]
-#version = "1.0.0-rc1"
-#default-features = false
-#features = ["sqlite"]
+[profile.release]
+opt-level = 3
+lto = true

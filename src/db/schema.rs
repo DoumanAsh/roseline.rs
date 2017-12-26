@@ -18,15 +18,15 @@ pub mod create {
 
 table! {
     vns(id) {
-        id -> Integer,
+        id -> BigInt,
         title -> Text,
     }
 }
 
 table! {
     hooks(id) {
-        id -> Integer,
-        vn_id -> Integer,
+        id -> BigInt,
+        vn_id -> BigInt,
         version -> Text,
         code -> Text,
     }

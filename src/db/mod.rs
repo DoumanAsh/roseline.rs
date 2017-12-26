@@ -15,7 +15,8 @@ pub use self::diesel::{
     QueryDsl,
     ExpressionMethods,
     OptionalExtension,
-    BelongingToDsl
+    BelongingToDsl,
+    TextExpressionMethods
 };
 
 use ::utils::ResultExt;
@@ -38,10 +39,57 @@ impl Db {
         })
     }
 
-    pub fn get_vn(&self, id: i32) -> result::QueryResult<Option<models::Vn>> {
+    pub fn put_hook(&self, vn: &models::Vn, version: String, code: String) -> result::QueryResult<models::HookView> {
+        debug!("DB: put hook='{}' for version='{}'", code, version);
+        use self::schema::hooks::dsl;
+        let hook = models::Hook::belonging_to(vn).filter(dsl::version.like(&version))
+                                                 .first::<models::Hook>(&*self.inner)
+                                                 .optional()?;
+
+        match hook {
+            Some(hook) => {
+                debug!("DB: found existing hook, update it");
+                diesel::update(dsl::hooks.filter(dsl::id.eq(hook.id)))
+                       .set(dsl::code.eq(&code))
+                       .execute(&*self.inner).map(move |_| models::HookView { vn_id: hook.vn_id, version: hook.version, code: code })
+            }
+            None => {
+                debug!("DB: adding new hook");
+                let hook = models::HookView {
+                    vn_id: vn.id,
+                    version,
+                    code
+                };
+                diesel::insert_into(dsl::hooks).values(&hook)
+                                               .execute(&*self.inner).map(|_| hook)
+            }
+        }
+    }
+
+    ///Inserts VN if it is missing, or return existing one.
+    pub fn put_vn(&self, id: i64, title: String) -> result::QueryResult<models::Vn> {
+        use self::schema::vns::dsl;
+
+        let vn = self.get_vn(id)?;
+
+        match vn {
+            Some(vn) => Ok(vn),
+            None => {
+                let vn = models::Vn { id, title };
+                debug!("DB: put {:?}", &vn);
+
+                diesel::insert_into(dsl::vns).values(&vn)
+                                             .execute(&*self.inner).map(|_| vn)
+            }
+        }
+    }
+
+    #[inline]
+    pub fn get_vn(&self, id: i64) -> result::QueryResult<Option<models::Vn>> {
         schema::vns::table.find(id).first::<models::Vn>(&*self.inner).optional()
     }
 
+    #[inline]
     pub fn get_hooks(&self, vn: &models::Vn) -> result::QueryResult<Vec<models::Hook>> {
         models::Hook::belonging_to(vn).get_results(&*self.inner)
     }

@@ -1,6 +1,8 @@
 extern crate futures;
 extern crate regex;
 
+use super::args::shell_split;
+use ::db;
 use ::db::Db;
 use ::vndb;
 use ::cell::Cell;
@@ -56,6 +58,17 @@ impl PendingCommand {
     }
 
     #[inline]
+    fn return_new_hook(&self, vn: &db::models::Vn, version: String, code: String) -> futures::Poll<CommandResult, String> {
+        match self.db.put_hook(vn, version, code) {
+            Ok(hook) => Self::return_string(format!("Added hook '{}' for VN: {}", hook.code, vn.title)),
+            Err(error) => {
+                error!("DB error: {}", error);
+                Self::return_str("Somethign wrong with my database...")
+            }
+        }
+    }
+
+    #[inline]
     ///Takes ongoing job to search VN or schedule new one
     fn search_vn_if(&self, title: &str) -> Ongoing {
         self.ongoing.take().unwrap_or_else(|| {
@@ -66,11 +79,23 @@ impl PendingCommand {
         })
     }
 
+    #[inline]
     ///Takes ongoing job to retrieve VN by title or schedule new one
     fn get_vn_if(&self, title: &str) -> Ongoing {
         self.ongoing.take().unwrap_or_else(|| {
             let jobs = vec![
                 self.vndb.get_vn_by_title(&title)
+            ];
+            Ongoing::new(future::join_all(jobs))
+        })
+    }
+
+    #[inline]
+    ///Takes ongoing job to retrieve VN by id or schedule new one
+    fn get_vn_by_id_if(&self, id: u64) -> Ongoing {
+        self.ongoing.take().unwrap_or_else(|| {
+            let jobs = vec![
+                self.vndb.get_vn_by_id(id)
             ];
             Ongoing::new(future::join_all(jobs))
         })
@@ -122,9 +147,120 @@ impl Future for PendingCommand {
         let cmd = self.cmd.take();
 
         match cmd {
+            //Add hook by VN's ID.
+            Command::SetHookById(id, Some(title), version, code) => {
+                let vn = match self.db.put_vn(id as i64, title) {
+                    Ok(vn) => vn,
+                    Err(error) => {
+                        error!("DB error: {}", error);
+                        return Self::return_str("My database has problems...");
+                    }
+                };
+
+                self.return_new_hook(&vn, version, code)
+            },
+            //Retrieve VN's title for new entry in DB.
+            Command::SetHookByIdGetVn(id, version, code) => {
+                let mut ongoing = self.get_vn_by_id_if(id);
+
+                let mut response = try_ongoing_job!(ongoing.jobs.poll(), ongoing, self, Command::SetHookByIdGetVn(id, version, code));
+                let mut response = response.drain(..);
+
+                match response.next() {
+                    Some(vndb::message::Response::Results(results)) => {
+                        let mut vn = try_parse_vn!(results.vn());
+                        match vn.items.len() {
+                            1 => {
+                                let vn = vn.items.drain(..).next().unwrap();
+                                self.cmd.set(Command::SetHookById(id, vn.title, version, code));
+                                self.poll()
+                            },
+                            _ => {
+                                warn!("VNDB returned more than 1 result when retrieving by id={}", id);
+                                Self::return_str("VNDB is doing some magic, I cannot add hook...")
+                            }
+                        }
+                    }
+                    other => {
+                        warn!("Unexpected VNDB response on get: {:?}", other);
+                        return Self::return_str("Something wrong with VNDB...")
+                    }
+                }
+            },
+            Command::SetHookById(id, None, version, code) => {
+                let vn = match self.db.get_vn(id as i64) {
+                    Ok(Some(vn)) => vn,
+                    Ok(None) => {
+                        self.cmd.set(Command::SetHookByIdGetVn(id, version, code));
+                        return self.poll();
+                    },
+                    Err(error) => {
+                        error!("DB error: {}", error);
+                        return Self::return_str("My database has problems...");
+                    }
+                };
+
+                self.return_new_hook(&vn, version, code)
+            },
+            //Add hook by searching VN with title.
+            Command::SetHookSerachVn(title, version, code) => {
+                let mut ongoing = self.search_vn_if(&title);
+
+                let mut response = try_ongoing_job!(ongoing.jobs.poll(), ongoing, self, Command::SetHookSerachVn(title, version, code));
+                let mut response = response.drain(..);
+                match response.next() {
+                    Some(vndb::message::Response::Results(results)) => {
+                        let mut vn = try_parse_vn!(results.vn());
+                        match vn.items.len() {
+                            0 => Self::return_str("No such VN could be found"),
+                            1 => {
+                                let vn = vn.items.drain(..).next().unwrap();
+                                self.cmd.set(Command::SetHookById(vn.id, Some(vn.title.unwrap()), version, code));
+                                self.poll()
+                            },
+                            num => Self::return_string(format!("There are too many hits='{}'. Try yourself -> https://vndb.org/v/all?sq={}",
+                                                               num, title))
+                        }
+                    }
+                    other => {
+                        warn!("Unexpected VNDB response on get: {:?}", other);
+                        return Self::return_str("Something wrong with VNDB...")
+                    }
+                }
+            },
+            Command::SetHookHelp(None) => Self::return_str("Usage: <title> <version> <code>"),
+            Command::SetHookHelp(Some(bad)) => Self::return_string(bad),
+            //Add hook by title
+            Command::SetHook(title, version, code) => {
+                let mut ongoing = self.get_vn_if(&title);
+
+                let mut response = try_ongoing_job!(ongoing.jobs.poll(), ongoing, self, Command::SetHook(title, version, code));
+                let mut response = response.drain(..);
+                match response.next() {
+                    Some(vndb::message::Response::Results(results)) => {
+                        let mut vn = try_parse_vn!(results.vn());
+
+                        match vn.items.len() {
+                            1 => {
+                                let vn = vn.items.drain(..).next().unwrap();
+                                self.cmd.set(Command::SetHookById(vn.id, Some(vn.title.unwrap()), version, code));
+                                self.poll()
+                            },
+                            _ => {
+                                self.cmd.set(Command::SetHookSerachVn(title, version, code));
+                                self.poll()
+                            }
+                        }
+                    }
+                    other => {
+                        warn!("Unexpected VNDB response on get: {:?}", other);
+                        return Self::return_str("Something wrong with VNDB...")
+                    }
+                }
+            },
             //Retrieve Hook from DB by id
             Command::GetHookById(id) => {
-                let vn = match self.db.get_vn(id as i32) {
+                let vn = match self.db.get_vn(id as i64) {
                     Ok(Some(id)) => id,
                     Ok(None) => return Self::return_str("No hook exists"),
                     Err(error) => {
@@ -323,10 +459,15 @@ pub enum Command {
     Pong,
     Help,
     GetHookHelp,
+    SetHookHelp(Option<String>),
     Vn(Option<String>),
     GetHookById(u64),
     GetHookSerachVn(String),
     GetHook(String),
+    SetHookById(u64, Option<String>, String, String),
+    SetHookByIdGetVn(u64, String, String),
+    SetHookSerachVn(String, String, String),
+    SetHook(String, String, String),
     VnSearch(String),
     VnRef(Vec<(vndb::RequestType, u64)>)
 }
@@ -337,29 +478,10 @@ impl Default for Command {
     }
 }
 
-#[cfg(test)]
-impl ::std::fmt::Debug for Command {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
-        match self {
-            &Command::None => write!(f, stringify!(Command::None)),
-            &Command::Pong => write!(f, stringify!(Command::Pong)),
-            &Command::Help => write!(f, stringify!(Command::Help)),
-            &Command::GetHookHelp => write!(f, stringify!(Command::GetHookHelp)),
-            &Command::Vn(ref payload) => write!(f, "Command::Vn({:?})", payload),
-            &Command::GetHookById(ref payload) => write!(f, "Command::GetHookById({:?})", payload),
-            &Command::GetHook(ref payload) => write!(f, "Command::GetHook({:?})", payload),
-            &Command::GetHookSerachVn(ref payload) => write!(f, "Command::GetHookSerachVn({:?})", payload),
-            &Command::VnSearch(ref payload) => write!(f, "Command::VnSearch({:?})", payload),
-            &Command::VnRef(_) => write!(f, "Command::VnRef(_)"),
-        }
-    }
-}
-
 impl Command {
     pub fn from_str(text: &str) -> Option<Command> {
         lazy_static! {
             static ref EXTRACT_CMD: regex::Regex = regex::Regex::new("\\s*\\.([^\\s]*)(\\s+(.+))*").unwrap();
-            //static ref EXTRACT_CMD: regex::Regex = regex::Regex::new(" *\\.([^\\s]*) *(.*)").unwrap();
             static ref EXTRACT_REFERENCE: regex::Regex = regex::Regex::new("(^|\\s)([vcrpu])([0-9]+)").unwrap();
             static ref EXTRACT_VN_ID: regex::Regex = regex::Regex::new("^v([0-9]+)$").unwrap();
         }
@@ -386,7 +508,31 @@ impl Command {
                         Some(Some(Ok(capture))) => Some(Command::GetHookById(capture)),
                         _ => Some(Command::GetHook(arg.to_owned())),
                     }
-                }
+                },
+                Some("set_hook") => {
+                    let arg = match captures.get(ARG_IDX) {
+                        Some(arg) => arg,
+                        None => return Some(Command::SetHookHelp(None)),
+                    };
+
+                    let args = match shell_split(arg.as_str()) {
+                        Ok(args) => args,
+                        Err(error) => return Some(Command::SetHookHelp(Some(error)))
+                    };
+
+                    if args.len() != 3 {
+                        return Some(Command::SetHookHelp(Some(format!("Invalid number of arguments {}. Expected 3", args.len()))))
+                    }
+
+                    let title = unsafe { args.get_unchecked(0) };
+                    let version = unsafe { args.get_unchecked(1) };
+                    let code = unsafe { args.get_unchecked(2) };
+
+                    match EXTRACT_VN_ID.captures(title).map(|cap| cap.get(1).map(|cap| cap.as_str()).map(|cap| cap.parse::<u64>())) {
+                        Some(Some(Ok(capture))) => Some(Command::SetHookById(capture, None, version.to_string(), code.to_string())),
+                        _ => Some(Command::SetHook(title.to_string(), version.to_string(), code.to_string()))
+                    }
+                },
                 _ => None
             }
         }
@@ -437,6 +583,30 @@ impl Command {
 mod tests {
     use super::vndb;
     use super::Command;
+
+    impl ::std::fmt::Debug for Command {
+        fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+            match self {
+                &Command::None => write!(f, stringify!(Command::None)),
+                &Command::Pong => write!(f, stringify!(Command::Pong)),
+                &Command::Help => write!(f, stringify!(Command::Help)),
+                &Command::GetHookHelp => write!(f, stringify!(Command::GetHookHelp)),
+                &Command::SetHookHelp(ref payload) => write!(f, "Command::SetHookHelp({:?})", payload),
+                &Command::Vn(ref payload) => write!(f, "Command::Vn({:?})", payload),
+                &Command::GetHookById(ref payload) => write!(f, "Command::GetHookById({:?})", payload),
+                &Command::GetHookSerachVn(ref payload) => write!(f, "Command::GetHookSerachVn({:?})", payload),
+                &Command::GetHook(ref payload) => write!(f, "Command::GetHook({:?})", payload),
+                &Command::SetHookById(ref payload, ref payload2, ref payload3, ref payload4) =>
+                    write!(f, "Command::SetHookById({:?}, {:?}, {:?}, {:?})", payload, payload2, payload3, payload4),
+                &Command::SetHookByIdGetVn(ref payload, ref payload2, ref payload3) =>
+                    write!(f, "Command::SetHookByIdGetVn({:?}, {:?}, {:?})", payload, payload2, payload3),
+                &Command::SetHookSerachVn(ref payload, ref payload2, ref payload3) => write!(f, "Command::SetHookSerachVn({:?}, {:?}, {:?})", payload, payload2, payload3),
+                &Command::SetHook(ref payload, ref payload2, ref payload3) => write!(f, "Command::SetHook({:?}, {:?}, {:?})", payload, payload2, payload3),
+                &Command::VnSearch(ref payload) => write!(f, "Command::VnSearch({:?})", payload),
+                &Command::VnRef(_) => write!(f, "Command::VnRef(_)"),
+            }
+        }
+    }
 
     macro_rules! assert_result {
         ($result:expr, $($expected:tt)+) => { assert_result!(ret => (), $result, $($expected)+) };
