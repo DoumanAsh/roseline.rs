@@ -701,12 +701,12 @@ impl Default for Command {
 impl Command {
     pub fn from_str(text: &str) -> Option<Command> {
         lazy_static! {
-            static ref EXTRACT_CMD: regex::Regex = regex::Regex::new("(^|\\s+)\\.([^\\s]*)(\\s+(.+))*").unwrap();
+            static ref EXTRACT_CMD: regex::Regex = regex::Regex::new("^\\s*\\.([^\\s]*)(\\s+(.+))*").unwrap();
             static ref EXTRACT_REFERENCE: regex::Regex = regex::Regex::new("(^|[a-z]/|\\s)([vcrpu])([0-9]+)").unwrap();
             static ref EXTRACT_VN_ID: regex::Regex = regex::Regex::new("^v([0-9]+)$").unwrap();
         }
 
-        const CMD_IDX: usize = 2;
+        const CMD_IDX: usize = 1;
         const ARG_IDX: usize = 3;
 
         if let Some(captures) = EXTRACT_CMD.captures(text) {
