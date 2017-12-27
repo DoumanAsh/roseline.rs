@@ -94,6 +94,16 @@ impl PendingCommand {
     }
 
     #[inline]
+    fn return_too_many_vn_hits(num: usize, title: String) -> futures::Poll<CommandResult, String> {
+        lazy_static! {
+            static ref RE: regex::Regex = regex::Regex::new("\\s+").unwrap();
+        }
+
+        let title = RE.replace_all(&title, "+");
+        Self::return_string(format!("There are too many hits='{}'. Try yourself -> https://vndb.org/v/all?sq={}", num, title))
+    }
+
+    #[inline]
     fn return_new_hook(&self, vn: &db::models::Vn, version: String, code: String) -> futures::Poll<CommandResult, String> {
         match self.db.put_hook(vn, version, code) {
             Ok(hook) => Self::return_string(format!("Added hook '{}' for VN: {}", hook.code, vn.title)),
@@ -203,8 +213,7 @@ impl PendingCommand {
                         self.cmd.set(Command::GetHookById(vn.id));
                         self.poll()
                     },
-                    num => Self::return_string(format!("There are too many hits='{}'. Try yourself -> https://vndb.org/v/all?sq={}",
-                                                       num, title))
+                    num => Self::return_too_many_vn_hits(num, title),
                 }
             }
             other => {
@@ -261,8 +270,7 @@ impl PendingCommand {
                         let vn = unsafe { vn.items.get_unchecked(0) };
                         Self::return_string(format!("{} - https://vndb.org/v{}", vn.title.as_ref().unwrap(), vn.id))
                     },
-                    num => Self::return_string(format!("There are too many hits='{}'. Try yourself -> https://vndb.org/v/all?sq={}",
-                                                       num, title))
+                    num => Self::return_too_many_vn_hits(num, title),
                 }
             },
             other => {
@@ -380,8 +388,7 @@ impl PendingCommand {
                         self.cmd.set(Command::SetHookById(vn.id, Some(vn.title.unwrap()), version, code));
                         self.poll()
                     },
-                    num => Self::return_string(format!("There are too many hits='{}'. Try yourself -> https://vndb.org/v/all?sq={}",
-                                                       num, title))
+                    num => Self::return_too_many_vn_hits(num, title),
                 }
             }
             other => {
@@ -502,8 +509,7 @@ impl PendingCommand {
                         self.cmd.set(Command::DelHookById(vn.id, version));
                         self.poll()
                     },
-                    num => Self::return_string(format!("There are too many hits='{}'. Try yourself -> https://vndb.org/v/all?sq={}",
-                                                       num, title))
+                    num => Self::return_too_many_vn_hits(num, title),
                 }
             }
             other => {
@@ -575,8 +581,7 @@ impl PendingCommand {
                         self.cmd.set(Command::DelVnById(vn.id));
                         self.poll()
                     },
-                    num => Self::return_string(format!("There are too many hits='{}'. Try yourself -> https://vndb.org/v/all?sq={}",
-                                                       num, title))
+                    num => Self::return_too_many_vn_hits(num, title),
                 }
             }
             other => {
@@ -696,12 +701,12 @@ impl Default for Command {
 impl Command {
     pub fn from_str(text: &str) -> Option<Command> {
         lazy_static! {
-            static ref EXTRACT_CMD: regex::Regex = regex::Regex::new("\\s*\\.([^\\s]*)(\\s+(.+))*").unwrap();
-            static ref EXTRACT_REFERENCE: regex::Regex = regex::Regex::new("(^|\\s)([vcrpu])([0-9]+)").unwrap();
+            static ref EXTRACT_CMD: regex::Regex = regex::Regex::new("(^|\\s+)\\.([^\\s]*)(\\s+(.+))*").unwrap();
+            static ref EXTRACT_REFERENCE: regex::Regex = regex::Regex::new("(^|[a-z]/|\\s)([vcrpu])([0-9]+)").unwrap();
             static ref EXTRACT_VN_ID: regex::Regex = regex::Regex::new("^v([0-9]+)$").unwrap();
         }
 
-        const CMD_IDX: usize = 1;
+        const CMD_IDX: usize = 2;
         const ARG_IDX: usize = 3;
 
         if let Some(captures) = EXTRACT_CMD.captures(text) {
@@ -831,8 +836,11 @@ impl Command {
 
 #[cfg(test)]
 mod tests {
+    use super::futures;
     use super::vndb;
     use super::Command;
+    use super::PendingCommand;
+    use super::CommandResult;
 
     impl ::std::fmt::Debug for Command {
         fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
@@ -894,6 +902,17 @@ mod tests {
     }
 
     #[test]
+    fn should_replace_whitespace_for_url() {
+        let expected = "There are too many hits='7'. Try yourself -> https://vndb.org/v/all?sq=Aoi+Tori";
+        let result = PendingCommand::return_too_many_vn_hits(7, "Aoi  \tTori".to_string()).unwrap();
+
+        match result {
+            futures::Async::Ready(CommandResult::Single(result)) => assert_eq!(expected, result),
+            _ => panic!("Unexpected!")
+        }
+    }
+
+    #[test]
     fn should_cmd_vn_ref() {
         let expected_refs = vec![
             (vndb::RequestType::vn(), 1u64),
@@ -914,6 +933,15 @@ mod tests {
 
         let result = Command::from_str("2v2");
         let _result = assert_result!(result, None);
+    }
+
+    #[test]
+    fn should_cmd_vn_ref_url() {
+        let result = Command::from_str("Try this Vn https://vndb.org/v125").expect("Some result");
+        let result = assert_result!(ret => res, result, Command::VnRef(ref res));
+
+        assert_eq!(result[0].0.short(), "v");
+        assert_eq!(result[0].1, 125);
     }
 
     #[test]
