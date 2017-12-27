@@ -29,8 +29,6 @@ mod db;
 
 use db::{
     Db,
-    RunQueryDsl,
-    QueryDsl
 };
 
 use utils::ResultExt;
@@ -51,9 +49,9 @@ fn run() -> Result<i32, String> {
 
     let db = Db::new()?;
     {
-        let vns_count = Db::vns().count().get_result::<i64>(&*db).format_err("Cannot count entries in vns")?;
-        let hooks_count = Db::hooks().count().get_result::<i64>(&*db).format_err("Cannot count entries in hooks")?;
-        info!("DB stats: VNs {} | Hooks {}", vns_count, hooks_count);
+        let vns = db.count_vns().format_err("Cannot count entries in vns table")?;
+        let hooks = db.count_hooks().format_err("Cannot count entries in vns table")?;
+        info!("DB stats: VNs {} | Hooks {}", vns, hooks);
     }
 
     let mut reactor = tokio_core::reactor::Core::new().format_err("Failed to init tokio loop")?;

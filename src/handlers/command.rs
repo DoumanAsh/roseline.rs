@@ -619,6 +619,17 @@ impl PendingCommand {
             }
         }
     }
+
+    ///Response with DB statistics
+    fn db_stats(&self) -> futures::Poll<CommandResult, String> {
+        match self.db.count_vns().and_then(|vns| self.db.count_hooks().map(|hooks| (vns, hooks))) {
+            Ok((vns, hooks)) => Self::return_string(format!("DB has {} VNs and {} Hooks", vns, hooks)),
+            Err(error) => {
+                error!("DB error: {}", error);
+                Self::return_str("My database has problems...")
+            }
+        }
+    }
 }
 
 impl Future for PendingCommand {
@@ -659,6 +670,8 @@ impl Future for PendingCommand {
 
             Command::VnRef(vns) => self.vn_ref(vns),
 
+            Command::DbStats => self.db_stats(),
+
             Command::Pong => Self::return_str("pong"),
             Command::Help => Self::return_str(HELP),
             Command::None => unreachable!()
@@ -670,6 +683,7 @@ pub enum Command {
     None,
     Pong,
     Help,
+    DbStats,
     GetHookHelp,
     SetHookHelp(Option<String>),
     Vn(Option<String>),
@@ -716,6 +730,7 @@ impl Command {
             match cmd {
                 Some("ping") => Some(Command::Pong),
                 Some("help") => Some(Command::Help),
+                Some("db_stats") => Some(Command::DbStats),
                 Some("vn") => Some(Command::Vn(captures.get(ARG_IDX).map(|name| name.as_str().to_owned()))),
                 Some("hook") => {
                     let arg = match captures.get(ARG_IDX) {
@@ -848,6 +863,7 @@ mod tests {
                 &Command::None => write!(f, stringify!(Command::None)),
                 &Command::Pong => write!(f, stringify!(Command::Pong)),
                 &Command::Help => write!(f, stringify!(Command::Help)),
+                &Command::DbStats => write!(f, stringify!(Command::DbStats)),
                 &Command::GetHookHelp => write!(f, stringify!(Command::GetHookHelp)),
                 &Command::SetHookHelp(ref payload) => write!(f, "Command::SetHookHelp({:?})", payload),
                 &Command::Vn(ref payload) => write!(f, "Command::Vn({:?})", payload),
@@ -1012,5 +1028,11 @@ mod tests {
 
         let result = Command::from_str(".del_hook title version");
         assert_result!(result, Some(Command::DelHook(_, _)));
+    }
+
+    #[test]
+    fn should_cmd_db_stats() {
+        let result = Command::from_str(".db_stats");
+        assert_result!(result, Some(Command::DbStats));
     }
 }

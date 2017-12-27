@@ -109,6 +109,16 @@ impl Db {
     }
 
     #[inline]
+    pub fn count_vns(&self) -> result::QueryResult<i64> {
+        Self::vns().count().get_result::<i64>(&*self.inner)
+    }
+
+    #[inline]
+    pub fn count_hooks(&self) -> result::QueryResult<i64> {
+        Self::hooks().count().get_result::<i64>(&*self.inner)
+    }
+
+    #[inline]
     ///Retrieves VN table
     pub fn vns() -> schema::vns::table {
         schema::vns::table
