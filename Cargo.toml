@@ -5,6 +5,14 @@ authors = ["Douman <douman@gmx.se>"]
 license = "Apache-2.0"
 readme = "README.md"
 
+[[bin]]
+name = "roseline"
+path = "src/main.rs"
+
+[[bin]]
+name = "roseline_launch"
+path = "src/launcher.rs"
+
 [dependencies]
 vndb = "0"
 
