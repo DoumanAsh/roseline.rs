@@ -39,6 +39,20 @@ impl Db {
         })
     }
 
+    pub fn delete_vn(&self, id: i64) -> result::QueryResult<usize> {
+        debug!("DB: delete VN by id={}", id);
+        use self::schema::vns::dsl;
+
+        diesel::delete(dsl::vns.filter(dsl::id.eq(id))).execute(&*self.inner)
+    }
+
+    pub fn delete_hook(&self, vn: &models::Vn, version: &String) -> result::QueryResult<usize> {
+        debug!("DB: delete for {:?} with version='{}'", vn, &version);
+        use self::schema::hooks::dsl;
+
+        diesel::delete(dsl::hooks.filter(dsl::vn_id.eq(&vn.id))
+                                 .filter(dsl::version.like(version))).execute(&*self.inner)
+    }
     pub fn put_hook(&self, vn: &models::Vn, version: String, code: String) -> result::QueryResult<models::HookView> {
         debug!("DB: put hook='{}' for version='{}'", code, version);
         use self::schema::hooks::dsl;

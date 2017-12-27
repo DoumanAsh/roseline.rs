@@ -43,7 +43,6 @@ mod tests {
     #[test]
     fn should_shell_split_bad_quotes() {
         let text = "lolka arg 1  'arg 2' \"arg 3";
-        let expected = ["lolka", "arg", "1", "arg 2", "arg 3"];
         let result = shell_split(text);
         assert!(result.is_err())
     }
