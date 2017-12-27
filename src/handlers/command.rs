@@ -795,7 +795,7 @@ impl Command {
                         "v" => vndb::RequestType::vn(),
                         "c" => vndb::RequestType::character(),
                         "r" => vndb::RequestType::release(),
-                        "p" => vndb::RequestType::release(),
+                        "p" => vndb::RequestType::producer(),
                         "u" => vndb::RequestType::user(),
                         _ => continue
                     },
