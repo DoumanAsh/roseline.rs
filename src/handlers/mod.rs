@@ -43,6 +43,7 @@ impl MessageHandler {
             Command::PRIVMSG(target, msg) => self.privmsg(from, target, msg),
             Command::JOIN(chanlist, _, _) => self.join(chanlist, from),
             Command::PART(chanlist, _) => self.part(chanlist, from),
+            Command::KICK(chanlist, user, _) => self.kick(chanlist, user, from),
             message => self.unhandled(from, message)
         }
     }
@@ -105,6 +106,18 @@ impl MessageHandler {
     fn part(&self, chanlist: String, from: Option<&str>) -> ReturnFuture {
         info!("{:?} left {}", from, chanlist);
         Box::new(future_ok())
+    }
+
+    #[inline(always)]
+    fn kick(&self, chanlist: String, who: String, from: Option<&str>) -> ReturnFuture {
+        info!("{:?} kicked {} out of {}", from, who, chanlist);
+        if who == self.server.current_nickname() {
+            let result = self.server.send_join(&chanlist);
+            Box::new(futures::future::result(result))
+        }
+        else  {
+            Box::new(future_ok())
+        }
     }
 
     #[inline(always)]

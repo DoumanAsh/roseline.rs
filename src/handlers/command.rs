@@ -829,7 +829,12 @@ impl Command {
                     None => continue
                 };
 
-                result.push((typ, id))
+                result.push((typ, id));
+
+                if result.len() > 5 {
+                    break;
+                }
+
             }
             Some(Command::VnRef(result))
         }
