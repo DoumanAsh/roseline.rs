@@ -81,7 +81,8 @@ impl Future for VndbRequest {
                             warn!("VNDB: request failed with error: {}", error);
                             self.state.set(RequestState::None);
                             self.client.state.set(State::None);
-                            return Ok(futures::Async::NotReady)
+                            //On connection error we need to restart client.
+                            return self.poll();
                         }
                     }
                 },
@@ -107,7 +108,8 @@ impl Future for VndbRequest {
                             warn!("VNDB: Failed to get response. Error: {}", error);
                             self.state.set(RequestState::None);
                             self.client.state.set(State::None);
-                            return Ok(futures::Async::NotReady)
+                            //On connection error we need to restart client.
+                            return self.poll();
                         }
                     }
                 }
