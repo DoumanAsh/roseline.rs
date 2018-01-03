@@ -28,7 +28,7 @@ slog-term = "2"
 slog-stdlog = "3"
 
 [dependencies.diesel]
-version = "1.0.0-rc1"
+version = "1"
 default-features = false
 features = ["sqlite"]
 
