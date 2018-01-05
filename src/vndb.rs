@@ -97,7 +97,8 @@ impl Future for VndbRequest {
                                 warn!("VNDB: connection is unexpectedly closed. Restart request...");
                                 self.state.set(RequestState::None);
                                 self.client.state.set(State::None);
-                                return Ok(futures::Async::NotReady)
+                                //Restart client by driving IO.
+                                return self.poll();
                             }
                         },
                         Ok(futures::Async::NotReady) => {
