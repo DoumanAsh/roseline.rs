@@ -81,7 +81,7 @@ impl Future for VndbRequest {
                             warn!("VNDB: request failed with error: {}", error);
                             self.state.set(RequestState::None);
                             self.client.state.set(State::None);
-                            //On connection error we need to restart client.
+                            //Restart client by driving IO.
                             return self.poll();
                         }
                     }
@@ -180,42 +180,58 @@ impl Client {
                     },
                     Err(error) => {
                         error!("VNDB: Connection failure. Error: {}", error);
-                        return Ok(futures::Async::NotReady)
+                        self.state.set(State::None);
+                        //Loop again to drive IO
                     }
                 },
-                State::Login(client, mut pending_login) => match pending_login.poll()? {
-                    futures::Async::Ready(_) => {
-                        info!("VNDB: Sent login server");
-                        let login_rsp = client.receive();
-                        self.state.set(State::WaitLogin(client, login_rsp));
-                        //Loop again to drive IO
+                State::Login(client, mut pending_login) => match pending_login.poll() {
+                    Ok(result) => match result {
+                        futures::Async::Ready(_) => {
+                            info!("VNDB: Sent login server");
+                            let login_rsp = client.receive();
+                            self.state.set(State::WaitLogin(client, login_rsp));
+                            //Loop again to drive IO
+                        },
+                        _ => {
+                            debug!("VNDB: Waiting to send request");
+                            self.state.set(State::Login(client, pending_login));
+                            return Ok(futures::Async::NotReady)
+                        }
                     },
-                    _ => {
-                        debug!("VNDB: Waiting to send request");
-                        self.state.set(State::Login(client, pending_login));
-                        return Ok(futures::Async::NotReady)
+                    Err(error) => {
+                        error!("VNDB: Connection failure. Error: {}", error);
+                        self.state.set(State::None);
+                        //Loop again to drive IO
                     }
                 },
-                State::WaitLogin(client, mut login_response) => match login_response.poll()? {
-                    futures::Async::Ready((Some(message::Response::Ok), _)) => {
-                        info!("VNDB: Successfully connected");
-                        self.state.set(State::Connected(client));
-                        return Ok(futures::Async::Ready(()))
+                State::WaitLogin(client, mut login_response) => match login_response.poll() {
+                    Ok(result) => match result {
+                        futures::Async::Ready((Some(message::Response::Ok), _)) => {
+                            info!("VNDB: Successfully connected");
+                            self.state.set(State::Connected(client));
+                            return Ok(futures::Async::Ready(()))
+                        },
+                        futures::Async::Ready((Some(rsp), _)) => {
+                            error!("VNDB: Failed to login. Error: {:?}", rsp);
+                            let login = client.send(message::request::Login::new(None, None));
+                            self.state.set(State::Login(client, login));
+                            //Loop again to drive IO
+                        },
+                        futures::Async::Ready((None, _)) => {
+                            warn!("VNDB: Connection is unexpectedly closed. Restart...");
+                            self.state.set(State::None);
+                            //Loop again to drive IO
+                        }
+                        _ => {
+                            debug!("VNDB: Waiting for auth");
+                            self.state.set(State::WaitLogin(client, login_response));
+                            return Ok(futures::Async::NotReady)
+                        }
                     },
-                    futures::Async::Ready((Some(rsp), _)) => {
-                        error!("VNDB: Failed to login. Error: {:?}", rsp);
-                        let login = client.send(message::request::Login::new(None, None));
-                        self.state.set(State::Login(client, login));
+                    Err(error) => {
+                        error!("VNDB: Connection failure. Error: {}", error);
+                        self.state.set(State::None);
                         //Loop again to drive IO
-                    },
-                    futures::Async::Ready((None, _)) => {
-                        warn!("VNDB: Connection is unexpectedly closed. Restart...");
-                        //Loop again to drive IO
-                    }
-                    _ => {
-                        debug!("VNDB: Waiting for auth");
-                        self.state.set(State::WaitLogin(client, login_response));
-                        return Ok(futures::Async::NotReady)
                     }
                 },
                 State::Connected(client) => {
