@@ -2,11 +2,16 @@ extern crate vndb;
 extern crate tokio_core;
 extern crate futures;
 
+#[macro_use(slog_debug, slog_info, slog_warn, slog_error, slog_log, slog_record, slog_b, slog_kv, slog_record_static)]
+extern crate slog;
+#[macro_use]
+extern crate slog_scope;
+
 use futures::future::Future;
 
-use ::io;
-use ::cell::Cell;
-use ::rc::Rc;
+use std::io;
+use std::cell::Cell;
+use std::rc::Rc;
 
 pub use self::vndb::protocol::message;
 use self::vndb::client::tokio::{
@@ -298,15 +303,12 @@ impl Client {
 
 #[cfg(test)]
 mod tests {
-    use ::log;
     use super::message;
     use super::tokio_core;
     use super::Client;
 
     #[test]
     fn get_vn_id() {
-        //Logs
-        //let _guard = log::init();
         let mut tokio_core = tokio_core::reactor::Core::new().expect("Should create tokio core");
         let client = Client::new(tokio_core.handle()).expect("Should create client initially");
 

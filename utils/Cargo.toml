@@ -1,0 +1,13 @@
+[package]
+name = "utils"
+version = "0.1.0"
+authors = ["Douman <douman@gmx.se>"]
+license = "Apache-2.0"
+readme = "README.md"
+
+[dependencies]
+slog-scope = "4"
+slog-async = "2"
+slog-term = "2"
+slog-stdlog = "3"
+slog = "2"

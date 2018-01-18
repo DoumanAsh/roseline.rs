@@ -1,0 +1,8 @@
+[package]
+name = "roseline_launch"
+version = "0.1.0"
+authors = ["Douman <douman@gmx.se>"]
+license = "Apache-2.0"
+readme = "README.md"
+
+[dependencies]

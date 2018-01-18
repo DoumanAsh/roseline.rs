@@ -1,31 +1,30 @@
 #[macro_use]
 extern crate lazy_static;
-#[macro_use]
-extern crate diesel;
 
 extern crate irc;
 extern crate tokio_core;
 extern crate futures;
 
-#[macro_use(slog_o, slog_info, slog_error, slog_warn, slog_log, slog_record, slog_debug, slog_trace, slog_record_static, slog_b, slog_kv)]
+#[macro_use(slog_info, slog_error, slog_warn, slog_log, slog_record, slog_debug, slog_trace, slog_record_static, slog_b, slog_kv)]
 extern crate slog;
 #[macro_use]
 extern crate slog_scope;
+
+extern crate utils;
+extern crate db;
+extern crate int_vndb;
+
+use int_vndb as vndb;
+use utils::log;
 
 use irc::client::server::{Server, IrcServer};
 use irc::client::server::utils::ServerExt;
 use futures::{Stream};
 
-use std::io;
-use std::rc;
 use std::cell;
 
-mod utils;
-mod log;
 mod config;
-mod vndb;
 mod handlers;
-mod db;
 
 use db::{
     Db,

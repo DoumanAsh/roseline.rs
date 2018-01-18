@@ -1,4 +1,9 @@
-use ::std::fmt;
+#[macro_use(slog_o, slog_kv)]
+extern crate slog;
+
+pub mod log;
+
+use std::fmt;
 
 ///Extension to std Result.
 pub trait ResultExt<T, E> {

@@ -1,0 +1,39 @@
+[package]
+name = "roseline"
+version = "0.1.0"
+authors = ["Douman <douman@gmx.se>"]
+license = "Apache-2.0"
+readme = "README.md"
+
+[dependencies.int-vndb]
+path = "../vndb"
+
+[dependencies.utils]
+path = "../utils"
+
+[dependencies.db]
+path = "../db"
+
+[dependencies]
+tokio-core = "0"
+futures = "0"
+
+lazy_static = "1"
+regex = "0"
+
+slog-scope = "4"
+
+[dependencies.irc]
+version = "0"
+default-features = false
+features = ["ctcp", "toml"]
+
+[dependencies.log]
+version = "0"
+default-features = false
+features = ["max_level_info", "release_max_level_warn"]
+
+[dependencies.slog]
+version = "2"
+default-features = false
+features = ["max_level_trace", "release_max_level_info"]

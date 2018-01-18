@@ -1,0 +1,22 @@
+[package]
+name = "db"
+version = "0.1.0"
+authors = ["Douman <douman@gmx.se>"]
+license = "Apache-2.0"
+readme = "README.md"
+
+[dependencies]
+slog = "2"
+slog-scope = "4"
+
+[dependencies.utils]
+path = "../utils"
+
+[dependencies.diesel]
+version = "1"
+default-features = false
+features = ["sqlite"]
+
+[dependencies.libsqlite3-sys]
+version = "0.8"
+features = ["bundled"]

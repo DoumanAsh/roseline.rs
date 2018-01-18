@@ -1,15 +1,22 @@
+#[macro_use]
 extern crate diesel;
+#[macro_use(slog_debug, slog_log, slog_record, slog_record_static, slog_b, slog_kv)]
+extern crate slog;
+#[macro_use]
+extern crate slog_scope;
+
+extern crate utils;
 
 pub mod schema;
 pub mod models;
 
-use self::diesel::{
+use diesel::{
     sql_query,
     Connection
 };
-use self::diesel::sqlite::SqliteConnection;
+use diesel::sqlite::SqliteConnection;
 
-pub use self::diesel::{
+pub use diesel::{
     result,
     RunQueryDsl,
     QueryDsl,
@@ -19,9 +26,9 @@ pub use self::diesel::{
     TextExpressionMethods
 };
 
-use ::utils::ResultExt;
+use utils::ResultExt;
 
-use ::rc::Rc;
+use std::rc::Rc;
 
 #[derive(Clone)]
 pub struct Db {
@@ -41,21 +48,21 @@ impl Db {
 
     pub fn delete_vn(&self, id: i64) -> result::QueryResult<usize> {
         debug!("DB: delete VN by id={}", id);
-        use self::schema::vns::dsl;
+        use schema::vns::dsl;
 
         diesel::delete(dsl::vns.filter(dsl::id.eq(id))).execute(&*self.inner)
     }
 
     pub fn delete_hook(&self, vn: &models::Vn, version: &String) -> result::QueryResult<usize> {
         debug!("DB: delete for {:?} with version='{}'", vn, &version);
-        use self::schema::hooks::dsl;
+        use schema::hooks::dsl;
 
         diesel::delete(dsl::hooks.filter(dsl::vn_id.eq(&vn.id))
                                  .filter(dsl::version.like(version))).execute(&*self.inner)
     }
     pub fn put_hook(&self, vn: &models::Vn, version: String, code: String) -> result::QueryResult<models::HookView> {
         debug!("DB: put hook='{}' for version='{}'", code, version);
-        use self::schema::hooks::dsl;
+        use schema::hooks::dsl;
         let hook = models::Hook::belonging_to(vn).filter(dsl::version.like(&version))
                                                  .first::<models::Hook>(&*self.inner)
                                                  .optional()?;
@@ -82,7 +89,7 @@ impl Db {
 
     ///Inserts VN if it is missing, or return existing one.
     pub fn put_vn(&self, id: i64, title: String) -> result::QueryResult<models::Vn> {
-        use self::schema::vns::dsl;
+        use schema::vns::dsl;
 
         let vn = self.get_vn(id)?;
 

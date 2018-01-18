@@ -1,10 +1,10 @@
-extern crate slog;
 extern crate slog_scope;
 extern crate slog_term;
 extern crate slog_async;
 extern crate slog_stdlog;
 
-use slog::Drain;
+use ::slog;
+use ::slog::Drain;
 
 ///Initializes logging facilities
 pub fn init() -> slog_scope::GlobalLoggerGuard {

@@ -1,4 +1,4 @@
-use db::schema::{vns, hooks};
+use ::schema::{vns, hooks};
 
 #[derive(Identifiable, Insertable, Queryable, Debug)]
 #[table_name = "vns"]
