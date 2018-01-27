@@ -1,0 +1,9 @@
+include _common.pug
++head(title="Roseline")
+
+body
+    +noscript
+    form.form.u-absolute-center(action="/search" method="GET" name="search")
+        h1.form__caption="Search VN"
+        div.o-field
+            input.c-field(name="query" placeholder="Type VN title or ID..." required type="text")

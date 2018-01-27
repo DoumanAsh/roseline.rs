@@ -1,0 +1,19 @@
+{% extends "_base.html" %}
+
+{% block title %}{{title}}{% endblock %}
+
+{% block head %}{% endblock %}
+
+{% block content %}
+    <div class="c-table">
+    <div class="c-table__caption">Search results for {{title}}</div>
+    <div class="c-table__row c-table__row--heading">
+        <span class="c-table__cell">Title</span>
+    </div>
+    {% for vn in vns %}
+        <div class="c-table__row c-table__row--clickable">
+            <a href="/vn/{{vn.id}}" class="c-table__cell">{{vn.title}}</span>
+        </div>
+    {% endfor %}
+    </div>
+{% endblock %}

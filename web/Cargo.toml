@@ -1,0 +1,47 @@
+[package]
+name = "roseline-web"
+version = "0.1.0"
+authors = ["Douman <douman@gmx.se>"]
+license = "Apache-2.0"
+readme = "README.md"
+
+build = "build.rs"
+
+[dependencies.utils]
+path = "../utils"
+
+[dependencies.db]
+path = "../db"
+
+[build-dependencies]
+askama = "0"
+
+[dependencies]
+tokio-core = "0"
+futures = "0"
+
+slog-scope = "4"
+
+mime = "0.3"
+hyper = "0"
+num_cpus = "1"
+
+askama = "0"
+
+http = "0"
+actix = "0"
+
+[dependencies.actix-web]
+version = "0"
+default-features = false
+features = ["tls"]
+
+[dependencies.log]
+version = "0"
+default-features = false
+features = ["max_level_info", "release_max_level_warn"]
+
+[dependencies.slog]
+version = "2"
+default-features = false
+features = ["max_level_trace", "release_max_level_info"]

@@ -4,6 +4,7 @@ members = [
     "db",
     "utils",
     "bot",
+    "web",
     "launcher"
 ]
 

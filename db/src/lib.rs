@@ -14,7 +14,7 @@ use diesel::{
     sql_query,
     Connection
 };
-use diesel::sqlite::SqliteConnection;
+pub use diesel::sqlite::SqliteConnection;
 
 pub use diesel::{
     result,
@@ -103,6 +103,13 @@ impl Db {
                                              .execute(&*self.inner).map(|_| vn)
             }
         }
+    }
+
+    pub fn search_vn(&self, title: &str) -> result::QueryResult<Vec<models::Vn>> {
+        use schema::vns::dsl;
+
+        schema::vns::table.filter(dsl::title.like(format!("%{}%", title)))
+                          .load::<models::Vn>(&*self.inner)
     }
 
     #[inline]
