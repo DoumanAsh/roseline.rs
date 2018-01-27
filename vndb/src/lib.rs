@@ -159,6 +159,7 @@ impl Client {
             let state = self.state.take();
             match state {
                 State::None => {
+                    info!("VNDB: Starting...");
                     let new_connection = match RcClient::new(&self.handle) {
                         Ok(new_connection) => new_connection,
                         Err(error) => {
@@ -166,6 +167,7 @@ impl Client {
                             return Err(error);
                         }
                     };
+                    info!("VNDB: Conneting...");
                     self.state.set(State::Connecting(new_connection));
                     return Ok(futures::Async::NotReady)
                 },
