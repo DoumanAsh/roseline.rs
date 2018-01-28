@@ -15,7 +15,6 @@ path = "../utils"
 path = "../db"
 
 [dependencies]
-tokio-core = "0"
 futures = "0"
 
 lazy_static = "1"

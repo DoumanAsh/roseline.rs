@@ -2,8 +2,9 @@ extern crate futures;
 
 use futures::future::Future;
 
-use ::irc::client::server::IrcServer;
-use ::irc::client::server::utils::ServerExt;
+use ::irc::client::IrcClient;
+use ::irc::client::ext::ClientExt;
+use ::irc::error::IrcError;
 
 use ::irc::proto::message::Message;
 use ::irc::proto::command::Command;
@@ -11,10 +12,10 @@ use ::irc::proto::command::Command;
 use ::vndb;
 use ::db::Db;
 
-type ReturnFuture = Box<Future<Item=(), Error=::irc::error::Error>>;
+type ReturnFuture = Box<Future<Item=(), Error=IrcError>>;
 
 #[inline]
-pub fn future_ok() -> futures::future::FutureResult<(), ::irc::error::Error> {
+pub fn future_ok() -> futures::future::FutureResult<(), IrcError> {
     futures::future::ok(())
 }
 
@@ -22,13 +23,13 @@ mod args;
 mod command;
 
 pub struct MessageHandler {
-    server: IrcServer,
+    server: IrcClient,
     vndb: vndb::Client,
     db: Db
 }
 
 impl MessageHandler {
-    pub fn new(server: IrcServer, vndb: vndb::Client, db: Db) -> Self {
+    pub fn new(server: IrcClient, vndb: vndb::Client, db: Db) -> Self {
         Self {
             server,
             vndb,
@@ -73,7 +74,7 @@ impl MessageHandler {
                          let result = match result {
                              Ok(command::CommandResult::Single(result)) => vec![result],
                              Ok(command::CommandResult::Multi(result)) => result,
-                             Err(error) => vec![format!("Some error happened: {}", error)]
+                             Err(error) => vec![format!("ごめんなさい、エラー: {}", error)]
                          };
 
                          match is_private {

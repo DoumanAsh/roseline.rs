@@ -2,7 +2,6 @@
 extern crate lazy_static;
 
 extern crate irc;
-extern crate tokio_core;
 extern crate futures;
 
 #[macro_use(slog_info, slog_error, slog_warn, slog_log, slog_record, slog_debug, slog_trace, slog_record_static, slog_b, slog_kv)]
@@ -17,9 +16,8 @@ extern crate int_vndb;
 use int_vndb as vndb;
 use utils::log;
 
-use irc::client::server::{Server, IrcServer};
-use irc::client::server::utils::ServerExt;
-use futures::{Stream};
+use irc::client::reactor::IrcReactor;
+use irc::client::ext::ClientExt;
 
 use std::cell;
 
@@ -53,29 +51,28 @@ fn run() -> Result<i32, String> {
         info!("DB stats: VNs {} | Hooks {}", vns, hooks);
     }
 
-    let mut reactor = tokio_core::reactor::Core::new().format_err("Failed to init tokio loop")?;
-    let tokio_handle = reactor.handle();
+    let mut reactor = IrcReactor::new().format_err("Failed to init event loop")?;
+    let tokio_handle = reactor.inner_handle();
     let config = config::load()?;
     let vndb_client = vndb::Client::new(tokio_handle.clone()).format_err("Failed to init VNDB client")?;
 
     loop {
-        let server = try_in_loop!(IrcServer::new_future(reactor.handle(), &config), "Error creating IRC Server connection: {}");
-        let server = try_in_loop!(reactor.run(server), "Error creating IRC Server connection: {}");
+        let client = try_in_loop!(reactor.prepare_client_and_connect(&config), "Error connecting to IRC Server: {}");
 
-        try_in_loop!(server.send_cap_req(&[irc::proto::caps::Capability::MultiPrefix]));
-        try_in_loop!(server.identify());
+        try_in_loop!(client.send_cap_req(&[irc::proto::caps::Capability::MultiPrefix]));
+        try_in_loop!(client.identify());
 
-        info!("Connected to {}:{} as {}",
+        info!("Connecting to {}:{} as {}",
               config.server.as_ref().unwrap(),
               config.port.as_ref().unwrap(),
-              server.current_nickname());
+              client.current_nickname());
 
-        let message_handler = handlers::MessageHandler::new(server.clone(), vndb_client.clone(), db.clone());
-        let server = server.stream().for_each(|message| {
+        let message_handler = handlers::MessageHandler::new(client.clone(), vndb_client.clone(), db.clone());
+        reactor.register_client_with_handler(client, move |_, message| {
             message_handler.dispatch(message)
         });
 
-        if let Err(error) = reactor.run(server) {
+        if let Err(error) = reactor.run() {
             warn!("Bot disconnected. Error: {}", error);
         }
     }
