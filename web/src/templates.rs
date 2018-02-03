@@ -1,14 +1,58 @@
 extern crate askama;
+extern crate actix_web;
+extern crate http;
+
+extern crate vndb;
 
 extern crate db;
 
 pub use self::askama::Template;
+
+use self::vndb::protocol::message::response::typed::VN;
+
+use self::http::Error as HttpError;
+use self::actix_web::dev::Handler;
+use self::actix_web::{
+    HttpResponse,
+    HttpRequest
+};
+use self::actix_web::headers::{
+    ContentEncoding
+};
 
 use self::db::models;
 
 #[derive(Template)]
 #[template(path="_base.html")]
 pub struct Base {
+}
+
+#[derive(Template)]
+#[template(path="index.html")]
+pub struct Index {
+    _parent: Base,
+    action: &'static str,
+    caption: &'static str,
+}
+
+impl Index {
+    pub fn new(action: &'static str, caption: &'static str) -> Self {
+        Self {
+            _parent: Base {},
+            action,
+            caption
+        }
+    }
+}
+
+impl<S> Handler<S> for Index {
+    type Result = Result<HttpResponse, HttpError>;
+
+    fn handle(&mut self, _: HttpRequest<S>) -> Self::Result {
+        HttpResponse::Ok().content_type("text/html; charset=utf-8")
+                          .content_encoding(ContentEncoding::Auto)
+                          .body(self.render().unwrap().into_bytes())
+    }
 }
 
 #[derive(Template)]
@@ -43,6 +87,16 @@ impl NotFound {
     }
 }
 
+impl<S> Handler<S> for NotFound {
+    type Result = Result<HttpResponse, HttpError>;
+
+    fn handle(&mut self, _: HttpRequest<S>) -> Self::Result {
+        HttpResponse::NotFound().content_type("text/html; charset=utf-8")
+                                .content_encoding(ContentEncoding::Auto)
+                                .body(self.render().unwrap().into_bytes())
+    }
+}
+
 #[derive(Template)]
 #[template(path="500.html")]
 pub struct InternalError {
@@ -69,6 +123,24 @@ pub struct Search<'a> {
 
 impl<'a> Search<'a> {
     pub fn new(title: &'a str, vns: Vec<models::Vn>) -> Self {
+        Self {
+            _parent: Base {},
+            title,
+            vns
+        }
+    }
+}
+
+#[derive(Template)]
+#[template(path="vndb_results.html")]
+pub struct VndbSearch<'a> {
+    _parent: Base,
+    title: &'a str,
+    vns: &'a VN
+}
+
+impl<'a> VndbSearch<'a> {
+    pub fn new(title: &'a str, vns: &'a VN) -> Self {
         Self {
             _parent: Base {},
             title,

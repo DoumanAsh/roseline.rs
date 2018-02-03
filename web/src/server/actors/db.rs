@@ -17,7 +17,7 @@ pub struct Db {
 }
 
 impl Db {
-    pub fn new(threads: usize) -> SyncAddress<Db> {
+    pub fn new(threads: usize) -> SyncAddress<Self> {
         SyncArbiter::start(threads, || Self {
             inner: InnerDb::new().expect("Actor DB to start")
         })
