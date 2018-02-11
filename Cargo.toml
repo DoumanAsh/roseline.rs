@@ -1,6 +1,5 @@
 [workspace]
 members = [
-    "vndb",
     "db",
     "utils",
     "bot",
