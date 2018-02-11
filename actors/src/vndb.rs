@@ -71,7 +71,7 @@ impl Actor for Vndb {
         let resolver = match ResolverFuture::from_system_conf(Arbiter::handle()) {
             Ok(resolver) => resolver,
             Err(error) => {
-                warn!("Unable to crate system DNS resolver. Error: {}", error);
+                warn!("Unable to create system DNS resolver. Error: {}", error);
                 ResolverFuture::new(ResolverConfig::default(), ResolverOpts::default(), Arbiter::handle())
             }
         };
