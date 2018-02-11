@@ -34,6 +34,8 @@ macro_rules! try_option {
     }}
 }
 
+const CMD_DELAY_MS: u64 = 500;
+
 pub struct Irc {
     config: Config,
     vndb: Address<actors::vndb::Vndb>,
@@ -207,7 +209,10 @@ impl Handler<GetVnResponse> for Irc {
                     ctx.notify(TextResponse::new(target, from, is_pm, command::Text::bad_vndb()))
                 }
             },
-            Err(error) => ctx.notify(TextResponse::new(target, from, is_pm, command::Text::error(error)))
+            Err(error) => {
+                warn!("GetVnResponse Error: '{}'. Re-try", error);
+                ctx.notify_later(GetVnResponse::new(target, from, is_pm, command::GetVn{ title }), duration::ms(CMD_DELAY_MS));
+            }
         }).map_err(|error, _act, _ctx| {
             error!("IRC: error processing GetVn: {}", error)
         });
@@ -246,7 +251,10 @@ impl Handler<SearchVnResponse> for Irc {
                     ctx.notify(TextResponse::new(target, from, is_pm, command::Text::bad_vndb()))
                 }
             },
-            Err(error) => ctx.notify(TextResponse::new(target, from, is_pm, command::Text::error(error)))
+            Err(error) => {
+                warn!("SearchVnResponse Error: '{}'. Re-try", error);
+                ctx.notify_later(SearchVnResponse::new(target, from, is_pm, command::SearchVn{ title }), duration::ms(CMD_DELAY_MS));
+            }
         }).map_err(|error, _act, _ctx| {
             error!("IRC: error processing SearchVn: {}", error)
         });
@@ -287,7 +295,11 @@ impl Handler<SetHookByExactVndbTitleResponse> for Irc {
                     ctx.notify(TextResponse::new(target, from, is_pm, command::Text::bad_vndb()))
                 }
             },
-            Err(error) => ctx.notify(TextResponse::new(target, from, is_pm, command::Text::error(error)))
+            Err(error) => {
+                warn!("SetHookByExactVndbTitleResponse Error: '{}'. Re-try", error);
+                let cmd = command::SetHookByExactVndbTitle {title, version, code};
+                ctx.notify_later(SetHookByExactVndbTitleResponse::new(target, from, is_pm, cmd), duration::ms(CMD_DELAY_MS));
+            }
         }).map_err(|error, _act, _ctx| {
             error!("IRC: error processing SetHook: {}", error)
         });
@@ -328,7 +340,11 @@ impl Handler<SetHookByVndbTitleResponse> for Irc {
                     ctx.notify(TextResponse::new(target, from, is_pm, command::Text::bad_vndb()))
                 }
             },
-            Err(error) => ctx.notify(TextResponse::new(target, from, is_pm, command::Text::error(error)))
+            Err(error) => {
+                warn!("SetHookByVndbTitleResponse Error: '{}'. Re-try", error);
+                let cmd = command::SetHookByVndbTitle {title, version, code};
+                ctx.notify_later(SetHookByVndbTitleResponse::new(target, from, is_pm, cmd), duration::ms(CMD_DELAY_MS));
+            }
         }).map_err(|error, _act, _ctx| {
             error!("IRC: error processing SetHook: {}", error)
         });
@@ -358,7 +374,11 @@ impl Handler<SetHookByTitleResponse> for Irc {
                 },
                 num => ctx.notify(TextResponse::new(target, from, is_pm, command::Text::better_vn_query(num, &title))),
             },
-            Err(error) => ctx.notify(TextResponse::new(target, from, is_pm, command::Text::error(error))),
+            Err(error) => {
+                warn!("SetHookByTitleResponse Error: '{}'. Re-try", error);
+                let cmd = command::SetHookByTitle {title, version, code};
+                ctx.notify_later(SetHookByTitleResponse::new(target, from, is_pm, cmd), duration::ms(CMD_DELAY_MS));
+            }
         }).map_err(|error, _act, _ctx| {
             error!("IRC: error processing SetHook: {}", error)
         });
@@ -444,7 +464,11 @@ impl Handler<SetHookByNewIdResponse> for Irc {
                     ctx.notify(TextResponse::new(target, from, is_pm, command::Text::bad_vndb()))
                 }
             },
-            Err(error) => ctx.notify(TextResponse::new(target, from, is_pm, command::Text::error(error)))
+            Err(error) => {
+                warn!("SetHookByNewIdResponse Error: '{}'. Re-try", error);
+                let cmd = command::SetHookByNewId {id, version, code};
+                ctx.notify_later(SetHookByNewIdResponse::new(target, from, is_pm, cmd), duration::ms(CMD_DELAY_MS));
+            }
         }).map_err(|error, _act, _ctx| {
             error!("IRC: error processing SetHookByNewId: {}", error)
         });
@@ -509,7 +533,11 @@ impl Handler<GetHookByExactVndbTitleResponse> for Irc {
                     ctx.notify(TextResponse::new(target, from, is_pm, command::Text::bad_vndb()))
                 }
             },
-            Err(error) => ctx.notify(TextResponse::new(target, from, is_pm, command::Text::error(error)))
+            Err(error) => {
+                warn!("GetHookByExactVndbTitleResponse Error: '{}'. Re-try", error);
+                let cmd = command::GetHookByExactVndbTitle {title};
+                ctx.notify_later(GetHookByExactVndbTitleResponse::new(target, from, is_pm, cmd), duration::ms(CMD_DELAY_MS));
+            }
         }).map_err(|error, _act, _ctx| {
             error!("IRC: error processing GetHook: {}", error)
         });
@@ -548,7 +576,11 @@ impl Handler<GetHookByVndbTitleResponse> for Irc {
                     ctx.notify(TextResponse::new(target, from, is_pm, command::Text::bad_vndb()))
                 }
             },
-            Err(error) => ctx.notify(TextResponse::new(target, from, is_pm, command::Text::error(error)))
+            Err(error) => {
+                warn!("GetHookByVndbTitleResponse Error: '{}'. Re-try", error);
+                let cmd = command::GetHookByVndbTitle {title};
+                ctx.notify_later(GetHookByVndbTitleResponse::new(target, from, is_pm, cmd), duration::ms(CMD_DELAY_MS));
+            }
         }).map_err(|error, _act, _ctx| {
             error!("IRC: error processing GetHook: {}", error)
         });
@@ -663,7 +695,11 @@ impl Handler<DelHookByExactVndbTitleResponse> for Irc {
                     ctx.notify(TextResponse::new(target, from, is_pm, command::Text::bad_vndb()))
                 }
             },
-            Err(error) => ctx.notify(TextResponse::new(target, from, is_pm, command::Text::error(error)))
+            Err(error) => {
+                warn!("DelHookByExactVndbTitleResponse Error: '{}'. Re-try", error);
+                let cmd = command::DelHookByExactVndbTitle {title, version};
+                ctx.notify_later(DelHookByExactVndbTitleResponse::new(target, from, is_pm, cmd), duration::ms(CMD_DELAY_MS));
+            }
         }).map_err(|error, _act, _ctx| {
             error!("IRC: error processing DelHook: {}", error)
         });
@@ -702,7 +738,11 @@ impl Handler<DelHookByVndbTitleResponse> for Irc {
                     ctx.notify(TextResponse::new(target, from, is_pm, command::Text::bad_vndb()))
                 }
             },
-            Err(error) => ctx.notify(TextResponse::new(target, from, is_pm, command::Text::error(error)))
+            Err(error) => {
+                warn!("DelHookByVndbTitleResponse Error: '{}'. Re-try", error);
+                let cmd = command::DelHookByVndbTitle {title, version};
+                ctx.notify_later(DelHookByVndbTitleResponse::new(target, from, is_pm, cmd), duration::ms(CMD_DELAY_MS));
+            }
         }).map_err(|error, _act, _ctx| {
             error!("IRC: error processing DelHook: {}", error)
         });
@@ -824,7 +864,11 @@ impl Handler<DelVnByExactVndbTitleResponse> for Irc {
                     ctx.notify(TextResponse::new(target, from, is_pm, command::Text::bad_vndb()))
                 }
             },
-            Err(error) => ctx.notify(TextResponse::new(target, from, is_pm, command::Text::error(error)))
+            Err(error) => {
+                warn!("DelVnByExactVndbTitleResponse Error: '{}'. Re-try", error);
+                let cmd = command::DelVnByExactVndbTitle {title};
+                ctx.notify_later(DelVnByExactVndbTitleResponse::new(target, from, is_pm, cmd), duration::ms(CMD_DELAY_MS));
+            }
         }).map_err(|error, _act, _ctx| {
             error!("IRC: error processing DelVn: {}", error)
         });
@@ -863,7 +907,11 @@ impl Handler<DelVnByVndbTitleResponse> for Irc {
                     ctx.notify(TextResponse::new(target, from, is_pm, command::Text::bad_vndb()))
                 }
             },
-            Err(error) => ctx.notify(TextResponse::new(target, from, is_pm, command::Text::error(error)))
+            Err(error) => {
+                warn!("DelVnByVndbTitleResponse Error: '{}'. Re-try", error);
+                let cmd = command::DelVnByVndbTitle {title};
+                ctx.notify_later(DelVnByVndbTitleResponse::new(target, from, is_pm, cmd), duration::ms(CMD_DELAY_MS));
+            }
         }).map_err(|error, _act, _ctx| {
             error!("IRC: error processing DelVn: {}", error)
         });
@@ -960,7 +1008,11 @@ impl Handler<GetRefResponse> for Irc {
                     ctx.notify(TextResponse::new(target, from, is_pm, command::Text::bad_vndb()))
                 }
             },
-            Err(error) => ctx.notify(TextResponse::new(target, from, is_pm, command::Text::error(error)))
+            Err(error) => {
+                warn!("GetRefResponse Error: '{}'. Re-try", error);
+                let cmd = command::Ref {id, kind};
+                ctx.notify_later(GetRefResponse::new(target, from, is_pm, cmd), duration::ms(CMD_DELAY_MS));
+            }
         }).map_err(|error, _act, _ctx| {
             error!("IRC: error processing GetRef: {}", error)
         });
