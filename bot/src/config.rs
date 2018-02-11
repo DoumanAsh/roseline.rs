@@ -1,4 +1,6 @@
-use ::irc::client::data::config::Config as IrcConfig;
+extern crate irc;
+
+use self::irc::client::data::config::Config as IrcConfig;
 
 use ::std::env;
 use ::std::path::PathBuf;

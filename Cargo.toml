@@ -5,7 +5,8 @@ members = [
     "utils",
     "bot",
     "web",
-    "launcher"
+    "launcher",
+    "actors"
 ]
 
 [profile.release]

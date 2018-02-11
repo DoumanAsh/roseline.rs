@@ -5,14 +5,14 @@ extern crate futures;
 extern crate mime;
 extern crate num_cpus;
 
-mod actors;
+extern crate actors;
 
 use self::futures::{
     future,
     Future
 };
 use self::actix::{
-    Actor
+    Supervisor
 };
 use self::actix_web::{
     Application,
@@ -210,8 +210,8 @@ pub fn start() {
 
     let system = actix::System::new("web");
     let state = State {
-        db: actors::db::Db::new(cpu_num),
-        vndb: actors::vndb::Vndb::new().start()
+        db: actors::db::Db::start_threaded(cpu_num),
+        vndb: Supervisor::start(|_| actors::vndb::Vndb::new())
     };
 
     HttpServer::new(move || application(state.clone())).bind(addr).expect("To bind HttpServer")

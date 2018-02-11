@@ -7,6 +7,9 @@ readme = "README.md"
 
 build = "build.rs"
 
+[dependencies.actors]
+path = "../actors"
+
 [dependencies.utils]
 path = "../utils"
 
@@ -17,29 +20,22 @@ path = "../db"
 askama = "0"
 
 [dependencies]
-tokio-core = "0"
-tokio-io = "0"
-tokio-tls = "0"
 futures = "0"
 
 slog-scope = "4"
 
 mime = "0.3"
-hyper = "0"
 num_cpus = "1"
 
 askama = "0"
 
-http = "0"
-actix = "0"
-
 vndb = "0"
 
-native-tls = "0"
-trust-dns-resolver = "0"
+http = "0"
+actix = { git = "https://github.com/actix/actix" }
 
 [dependencies.actix-web]
-version = "0"
+git = "https://github.com/actix/actix-web"
 default-features = false
 features = ["tls"]
 

@@ -1,31 +1,27 @@
 [package]
-name = "roseline"
+name = "actors"
 version = "0.1.0"
 authors = ["Douman <douman@gmx.se>"]
 license = "Apache-2.0"
 readme = "README.md"
 
-[dependencies.actors]
-path = "../actors"
-
-[dependencies.utils]
-path = "../utils"
+[dependencies.db]
+path = "../db"
 
 [dependencies]
-vndb = "0"
-
-actix = { git = "https://github.com/actix/actix" }
+tokio-core = "0"
+tokio-io = "0"
+tokio-tls = "0"
 futures = "0"
-
-lazy_static = "1"
-regex = "0"
 
 slog-scope = "4"
 
-[dependencies.irc]
-version = "0"
-default-features = false
-features = ["ctcp", "toml"]
+vndb = "0"
+
+native-tls = "0"
+trust-dns-resolver = "0"
+
+actix = { git = "https://github.com/actix/actix" }
 
 [dependencies.log]
 version = "0"

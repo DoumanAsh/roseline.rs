@@ -14,8 +14,11 @@ use self::tokio_tls::{TlsConnectorExt, TlsStream};
 use self::trust_dns_resolver::ResolverFuture;
 use self::trust_dns_resolver::config::{ResolverConfig, ResolverOpts};
 use self::tokio_core::net::TcpStream;
-use self::tokio_io::AsyncRead;
+use self::tokio_io::{AsyncRead};
+use self::tokio_io::codec::{FramedRead};
+use self::tokio_io::io::{WriteHalf};
 use self::actix::prelude::*;
+use self::actix::io::{FramedWrite, WriteHandler};
 use self::vndb::protocol;
 
 use ::collections::VecDeque;
@@ -23,19 +26,23 @@ use ::time;
 use ::io;
 use ::net;
 
+type TlsFramedWrite = WriteHalf<TlsStream<TcpStream>>;
+
 pub struct Vndb {
-    cell: Option<FramedCell<Vndb>>,
+    framed: Option<actix::io::FramedWrite<TlsFramedWrite, protocol::Codec>>,
     queue: VecDeque<oneshot::Sender<io::Result<protocol::message::Response>>>
 }
 
 impl Vndb {
     pub fn new() -> Self {
         Self {
-            cell: None,
+            framed: None,
             queue: VecDeque::with_capacity(10)
         }
     }
 }
+
+impl WriteHandler<io::Error> for Vndb {}
 
 impl Actor for Vndb {
     type Context = Context<Self>;
@@ -90,45 +97,56 @@ impl Actor for Vndb {
             })
         }).map(|socket, act, ctx| {
             info!("VNDB: Connected over TLS.");
-            let mut cell = act.add_framed(socket.framed(protocol::Codec), ctx);
-            cell.send(protocol::message::request::Login::new(None, None).into());
-            act.cell = Some(cell);
+            let (read, write) = socket.split();
+
+            ctx.add_stream(FramedRead::new(read, protocol::Codec));
+
+            let mut framed = FramedWrite::new(write, protocol::Codec, ctx);
+            framed.write(protocol::message::request::Login::new(None, None).into());
+
+            act.framed = Some(framed);
         }).wait(ctx);
     }
 }
 
 impl Supervised for Vndb {
     fn restarting(&mut self, _: &mut Self::Context) {
-        self.cell.take();
+        info!("VNDB: Restarting...");
+        self.framed.take();
         for tx in self.queue.drain(..) {
             let _ = tx.send(Err(io::Error::new(io::ErrorKind::ConnectionAborted, "Restart")));
         }
     }
 }
 
-
-impl FramedActor for Vndb {
-    type Io = TlsStream<TcpStream>;
-    type Codec = protocol::Codec;
-
-    fn closed(&mut self, error: Option<io::Error>, _: &mut Self::Context) {
-        self.cell.take();
-        match error {
-            Some(error) => warn!("VNDB: connection is closed. Error: {}", error),
-            None => warn!("VNDB: connection is closed"),
-        }
+impl StreamHandler<protocol::message::Response, io::Error> for Vndb {
+    fn finished(&mut self, ctx: &mut Self::Context) {
+        warn!("VNDB: Connection is closed");
+        ctx.stop();
     }
 
-    fn handle(&mut self, msg: io::Result<protocol::message::Response>, _ctx: &mut Self::Context) {
-        trace!("VNDB: receive {:?}", msg);
+    fn error(&mut self, error: io::Error, ctx: &mut Self::Context) -> bool {
+        warn!("VNDB: IO error: {}", error);
+
+        if let Some(tx) = self.queue.pop_front() {
+            let _ = tx.send(Err(error));
+        }
+
+        ctx.stop();
+
+        true
+    }
+
+    fn handle(&mut self, msg: protocol::message::Response, _: &mut Self::Context) {
+        trace!("VNDB: receives {:?}", msg);
         match self.queue.pop_front() {
             Some(tx) => {
-                let _ = tx.send(msg);
+                let _ = tx.send(Ok(msg));
             },
             None => {
                 match msg {
                     //As we only use Get methods, OK can be received on login only.
-                    Ok(protocol::message::Response::Ok) => (),
+                    protocol::message::Response::Ok => (),
                     msg => warn!("Received message while there was no request. Message={:?}", msg)
                 }
             }
@@ -158,6 +176,24 @@ impl Get {
                 options
             }
         }
+    }
+
+    pub fn get_by_id(kind: Type, id: u64) -> Self {
+        let filters = Filters::new().filter(format_args!("id = {}", id));
+
+        Self::new(kind, Flags::new().basic(), filters, None)
+    }
+
+    #[inline]
+    pub fn vn_by_id(id: u64) -> Self {
+        Self::get_by_id(Type::vn(), id)
+    }
+
+    pub fn vn_by_exact_title(title: &str) -> Self {
+        let filters = Filters::new().filter(format_args!("title = \"{}\"", title))
+                                    .or(format_args!("original = \"{}\"", title));
+
+        Self::new(Type::vn(), Flags::new().basic(), filters, None)
     }
 
     pub fn vn_by_title(title: &str) -> Self {
@@ -191,21 +227,20 @@ impl ResponseType for Request {
 }
 
 impl Handler<Request> for Vndb {
-    type Result = ResponseFuture<Self, Request>;
+    type Result = ResponseFuture<Request>;
 
     fn handle(&mut self, msg: Request, _: &mut Self::Context) -> Self::Result {
         trace!("VNDB: send {}", &msg.0);
 
         let (tx, rx) = oneshot::channel();
-        if let Some(ref mut cell) = self.cell {
+        if let Some(ref mut framed) = self.framed {
             self.queue.push_back(tx);
-            cell.send(msg.0.into());
+            framed.write(msg.0.into());
         } else {
             let _ = tx.send(Err(io::Error::new(io::ErrorKind::NotConnected, "Disconnected")));
         }
 
         Box::new(rx.map_err(|_| io::Error::new(io::ErrorKind::ConnectionAborted, "Restart"))
-                   .and_then(|res| res)
-                   .actfuture())
+                   .and_then(|res| res))
     }
 }

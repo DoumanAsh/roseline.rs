@@ -4,6 +4,9 @@ extern crate slog;
 pub mod log;
 
 use std::fmt;
+use std::time;
+
+pub mod duration;
 
 ///Extension to std Result.
 pub trait ResultExt<T, E> {
