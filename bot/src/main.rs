@@ -27,9 +27,9 @@ fn run() -> Result<i32, String> {
     let config = config::load()?;
     let system = actix::System::new("roseline");
 
-    let db: actix::SyncAddress<_> = actors::db::Db::start_threaded(1);
-    let vndb: actix::Address<_> = Supervisor::start(|_| actors::vndb::Vndb::new());
-    let irc: actix::Address<_> = Supervisor::start(|_| irc::Irc::new(config, vndb, db));
+    let db: actix::Addr<actix::Syn, _> = actors::db::Db::start_threaded(1);
+    let vndb: actix::Addr<actix::Unsync, _> = Supervisor::start(|_| actors::vndb::Vndb::new());
+    let _irc: actix::Addr<actix::Unsync, _> = Supervisor::start(|_| irc::Irc::new(config, vndb, db));
 
     Ok(system.run())
 }

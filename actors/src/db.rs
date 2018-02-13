@@ -18,7 +18,7 @@ impl Db {
         }
     }
 
-    pub fn start_threaded(threads: usize) -> SyncAddress<Self> {
+    pub fn start_threaded(threads: usize) -> Addr<Syn, Self> {
         SyncArbiter::start(threads, || Self::new())
     }
 }
@@ -35,12 +35,11 @@ pub struct VnData {
 
 ///Retrieves all information about VN
 pub struct GetVnData(pub u64);
-impl ResponseType for GetVnData {
-    type Item = Option<VnData>;
-    type Error = String;
+impl Message for GetVnData {
+    type Result = Result<Option<VnData>, String>;
 }
 impl Handler<GetVnData> for Db {
-    type Result = MessageResult<GetVnData>;
+    type Result = <GetVnData as Message>::Result;
 
     fn handle(&mut self, msg: GetVnData, _: &mut Self::Context) -> Self::Result {
         let vn = self.inner.get_vn(msg.0 as i64).map_err(|err| format!("{}", err))?;
@@ -57,12 +56,11 @@ impl Handler<GetVnData> for Db {
 
 ///Retrieves VN
 pub struct GetVn(pub u64);
-impl ResponseType for GetVn {
-    type Item = Option<models::Vn>;
-    type Error = String;
+impl Message for GetVn {
+    type Result = Result<Option<models::Vn>, String>;
 }
 impl Handler<GetVn> for Db {
-    type Result = MessageResult<GetVn>;
+    type Result = <GetVn as Message>::Result;
 
     fn handle(&mut self, msg: GetVn, _: &mut Self::Context) -> Self::Result {
         self.inner.get_vn(msg.0 as i64).map_err(|err| format!("{}", err))
@@ -72,12 +70,11 @@ impl Handler<GetVn> for Db {
 
 ///Retrieves hooks for VN.
 pub struct GetHooks(pub models::Vn);
-impl ResponseType for GetHooks {
-    type Item = VnData;
-    type Error = String;
+impl Message for GetHooks {
+    type Result = Result<VnData, String>;
 }
 impl Handler<GetHooks> for Db {
-    type Result = MessageResult<GetHooks>;
+    type Result = <GetHooks as Message>::Result;
 
     fn handle(&mut self, msg: GetHooks, _: &mut Self::Context) -> Self::Result {
         let vn = msg.0;
@@ -91,12 +88,11 @@ pub struct PutVn {
     pub id: u64,
     pub title: String
 }
-impl ResponseType for PutVn {
-    type Item = models::Vn;
-    type Error = String;
+impl Message for PutVn {
+    type Result = Result<models::Vn, String>;
 }
 impl Handler<PutVn> for Db {
-    type Result = MessageResult<PutVn>;
+    type Result = <PutVn as Message>::Result;
 
     fn handle(&mut self, msg: PutVn, _: &mut Self::Context) -> Self::Result {
         let PutVn{id, title} = msg;
@@ -110,12 +106,11 @@ pub struct PutHook {
     pub version: String,
     pub code: String,
 }
-impl ResponseType for PutHook {
-    type Item = models::HookView;
-    type Error = String;
+impl Message for PutHook {
+    type Result = Result<models::HookView, String>;
 }
 impl Handler<PutHook> for Db {
-    type Result = MessageResult<PutHook>;
+    type Result = <PutHook as Message>::Result;
 
     fn handle(&mut self, msg: PutHook, _: &mut Self::Context) -> Self::Result {
         let PutHook{ vn, version, code } = msg;
@@ -125,13 +120,12 @@ impl Handler<PutHook> for Db {
 
 ///Search VNs by title in DB.
 pub struct SearchVn(pub String);
-impl ResponseType for SearchVn {
-    type Item = Vec<models::Vn>;
-    type Error = String;
+impl Message for SearchVn {
+    type Result = Result<Vec<models::Vn>, String>;
 }
 
 impl Handler<SearchVn> for Db {
-    type Result = MessageResult<SearchVn>;
+    type Result = <SearchVn as Message>::Result;
 
     fn handle(&mut self, msg: SearchVn, _: &mut Self::Context) -> Self::Result {
         self.inner.search_vn(&msg.0).map_err(|err| format!("{}", err))
@@ -140,13 +134,12 @@ impl Handler<SearchVn> for Db {
 
 ///Deletes VN alongside all hooks
 pub struct DelVnData(pub u64);
-impl ResponseType for DelVnData {
-    type Item = usize;
-    type Error = String;
+impl Message for DelVnData {
+    type Result = Result<usize, String>;
 }
 
 impl Handler<DelVnData> for Db {
-    type Result = MessageResult<DelVnData>;
+    type Result = <DelVnData as Message>::Result;
 
     fn handle(&mut self, msg: DelVnData, _: &mut Self::Context) -> Self::Result {
         self.inner.delete_vn(msg.0 as i64).map_err(|err| format!("{}", err))
@@ -158,12 +151,11 @@ pub struct DelHook {
     pub vn: models::Vn,
     pub version: String,
 }
-impl ResponseType for DelHook {
-    type Item = usize;
-    type Error = String;
+impl Message for DelHook {
+    type Result = Result<usize, String>;
 }
 impl Handler<DelHook> for Db {
-    type Result = MessageResult<DelHook>;
+    type Result = <DelHook as Message>::Result;
 
     fn handle(&mut self, msg: DelHook, _: &mut Self::Context) -> Self::Result {
         let DelHook{vn, version} = msg;

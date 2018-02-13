@@ -16,7 +16,7 @@ use self::irc::client::{
     IrcClientFuture
 };
 use self::irc::proto::command::Command;
-use self::irc::proto::message::Message;
+use self::irc::proto::message::Message as InnerIrcMessage;
 use self::irc::error::IrcError;
 use self::irc::client::ext::ClientExt;
 use self::utils::duration;
@@ -38,13 +38,13 @@ const CMD_DELAY_MS: u64 = 500;
 
 pub struct Irc {
     config: Config,
-    vndb: Address<actors::vndb::Vndb>,
-    db: SyncAddress<actors::db::Db>,
+    vndb: Addr<Unsync, actors::vndb::Vndb>,
+    db: Addr<Syn, actors::db::Db>,
     client: Option<IrcClient>
 }
 
 impl Irc {
-    pub fn new(config: Config, vndb: Address<actors::vndb::Vndb>, db: SyncAddress<actors::db::Db>) -> Self {
+    pub fn new(config: Config, vndb: Addr<Unsync, actors::vndb::Vndb>, db: Addr<Syn, actors::db::Db>) -> Self {
         Self {
             config,
             vndb,
@@ -55,11 +55,10 @@ impl Irc {
 }
 
 #[derive(Debug)]
-struct IrcMessage(pub Message);
+struct IrcMessage(pub InnerIrcMessage);
 
-impl ResponseType for IrcMessage {
-    type Item = ();
-    type Error = IrcError;
+impl Message for IrcMessage {
+    type Result = Result<(), IrcError>;
 }
 
 impl StreamHandler<IrcMessage, IrcError> for Irc {
@@ -68,10 +67,10 @@ impl StreamHandler<IrcMessage, IrcError> for Irc {
         ctx.stop();
     }
 
-    fn error(&mut self, error: IrcError, ctx: &mut Self::Context) -> bool {
+    fn error(&mut self, error: IrcError, ctx: &mut Self::Context) -> ErrorAction {
         warn!("IRC: Reading IO error: {}", error);
         ctx.stop();
-        true
+        ErrorAction::Stop
     }
 
     fn handle(&mut self, msg: IrcMessage, ctx: &mut Self::Context) {
@@ -164,14 +163,13 @@ impl<T> GetIrcResponse<T> {
     }
 }
 
-impl<T> ResponseType for GetIrcResponse<T> {
-    type Item = ();
-    type Error = IrcError;
+impl<T> Message for GetIrcResponse<T> {
+    type Result = Result<(), IrcError>;
 }
 
 type TextResponse = GetIrcResponse<command::Text>;
 impl Handler<TextResponse> for Irc {
-    type Result = MessageResult<TextResponse>;
+    type Result = <TextResponse as Message>::Result;
 
     fn handle(&mut self, msg: TextResponse, _: &mut Self::Context) -> Self::Result {
         let client = self.client.as_ref().unwrap();
@@ -183,14 +181,14 @@ impl Handler<TextResponse> for Irc {
 //.vn
 type GetVnResponse = GetIrcResponse<command::GetVn>;
 impl Handler<GetVnResponse> for Irc {
-    type Result = MessageResult<GetVnResponse>;
+    type Result = <GetVnResponse as Message>::Result;
 
     fn handle(&mut self, msg: GetVnResponse, ctx: &mut Self::Context) -> Self::Result {
         let GetVnResponse {target, from, is_pm, cmd} = msg;
         let title = cmd.title;
 
         let get_vn = actors::vndb::Get::vn_by_exact_title(&title);
-        let get_vn = self.vndb.call_fut(get_vn.into()).into_actor(self);
+        let get_vn = self.vndb.send(get_vn.into()).into_actor(self);
         let get_vn = get_vn.map(move |result, _act, ctx| match result {
             Ok(results) => match results {
                 actors::vndb::Response::Results(result) => match result.vn() {
@@ -224,14 +222,14 @@ impl Handler<GetVnResponse> for Irc {
 
 type SearchVnResponse = GetIrcResponse<command::SearchVn>;
 impl Handler<SearchVnResponse> for Irc {
-    type Result = MessageResult<SearchVnResponse>;
+    type Result = <SearchVnResponse as Message>::Result;
 
     fn handle(&mut self, msg: SearchVnResponse, ctx: &mut Self::Context) -> Self::Result {
         let SearchVnResponse {target, from, is_pm, cmd} = msg;
         let title = cmd.title;
 
         let search_vn = actors::vndb::Get::vn_by_title(&title);
-        let search_vn = self.vndb.call_fut(search_vn.into()).into_actor(self);
+        let search_vn = self.vndb.send(search_vn.into()).into_actor(self);
         let search_vn = search_vn.map(move |result, _act, ctx| match result {
             Ok(results) => match results {
                 actors::vndb::Response::Results(result) => match result.vn() {
@@ -267,14 +265,14 @@ impl Handler<SearchVnResponse> for Irc {
 //.set_hook
 type SetHookByExactVndbTitleResponse = GetIrcResponse<command::SetHookByExactVndbTitle>;
 impl Handler<SetHookByExactVndbTitleResponse> for Irc {
-    type Result = MessageResult<SetHookByExactVndbTitleResponse>;
+    type Result = <SetHookByExactVndbTitleResponse as Message>::Result;
 
     fn handle(&mut self, msg: SetHookByExactVndbTitleResponse, ctx: &mut Self::Context) -> Self::Result {
         let SetHookByExactVndbTitleResponse {target, from, is_pm, cmd} = msg;
         let command::SetHookByExactVndbTitle {title, version, code} = cmd;
 
         let get_vn = actors::vndb::Get::vn_by_exact_title(&title);
-        let get_vn = self.vndb.call_fut(get_vn.into()).into_actor(self);
+        let get_vn = self.vndb.send(get_vn.into()).into_actor(self);
         let get_vn = get_vn.map(move |result, _act, ctx| match result {
             Ok(results) => match results {
                 actors::vndb::Response::Results(result) => match result.vn() {
@@ -311,14 +309,14 @@ impl Handler<SetHookByExactVndbTitleResponse> for Irc {
 
 type SetHookByVndbTitleResponse = GetIrcResponse<command::SetHookByVndbTitle>;
 impl Handler<SetHookByVndbTitleResponse> for Irc {
-    type Result = MessageResult<SetHookByVndbTitleResponse>;
+    type Result = <SetHookByVndbTitleResponse as Message>::Result;
 
     fn handle(&mut self, msg: SetHookByVndbTitleResponse, ctx: &mut Self::Context) -> Self::Result {
         let SetHookByVndbTitleResponse {target, from, is_pm, cmd} = msg;
         let command::SetHookByVndbTitle {title, version, code} = cmd;
 
         let search_vn = actors::vndb::Get::vn_by_title(&title);
-        let search_vn = self.vndb.call_fut(search_vn.into()).into_actor(self);
+        let search_vn = self.vndb.send(search_vn.into()).into_actor(self);
         let search_vn = search_vn.map(move |result, _act, ctx| match result {
             Ok(results) => match results {
                 actors::vndb::Response::Results(result) => match result.vn() {
@@ -356,14 +354,14 @@ impl Handler<SetHookByVndbTitleResponse> for Irc {
 
 type SetHookByTitleResponse = GetIrcResponse<command::SetHookByTitle>;
 impl Handler<SetHookByTitleResponse> for Irc {
-    type Result = MessageResult<SetHookByTitleResponse>;
+    type Result = <SetHookByTitleResponse as Message>::Result;
 
     fn handle(&mut self, msg: SetHookByTitleResponse, ctx: &mut Self::Context) -> Self::Result {
         let SetHookByTitleResponse {target, from, is_pm, cmd} = msg;
         let command::SetHookByTitle {title, version, code} = cmd;
 
         let search_vn = actors::db::SearchVn(title.clone());
-        let search_vn = self.db.call_fut(search_vn).into_actor(self);
+        let search_vn = self.db.send(search_vn).into_actor(self);
         let search_vn = search_vn.map(move |result, _act, ctx| match result {
             Ok(mut vns) => match vns.len() {
                 0 => ctx.notify(SetHookByExactVndbTitleResponse::new(target, from, is_pm, command::SetHookByExactVndbTitle { title, version, code })),
@@ -390,7 +388,7 @@ impl Handler<SetHookByTitleResponse> for Irc {
 
 type SetHookForVnResponse = GetIrcResponse<command::SetVnHook>;
 impl Handler<SetHookForVnResponse> for Irc {
-    type Result = MessageResult<SetHookForVnResponse>;
+    type Result = <SetHookForVnResponse as Message>::Result;
 
     fn handle(&mut self, msg: SetHookForVnResponse, ctx: &mut Self::Context) -> Self::Result {
         let SetHookForVnResponse {target, from, is_pm, cmd} = msg;
@@ -398,7 +396,7 @@ impl Handler<SetHookForVnResponse> for Irc {
         let title = vn.title.clone();
 
         let put_hook = actors::db::PutHook { vn, version, code };
-        let put_hook = self.db.call_fut(put_hook).into_actor(self);
+        let put_hook = self.db.send(put_hook).into_actor(self);
         let put_hook = put_hook.map(move |result, _act, ctx| match result {
             Ok(result) => ctx.notify(TextResponse::new(target, from, is_pm, format!("Added hook '{}' for VN: {}", result.code, title).into())),
             Err(error) => ctx.notify(TextResponse::new(target, from, is_pm, command::Text::error(error))),
@@ -413,14 +411,14 @@ impl Handler<SetHookForVnResponse> for Irc {
 
 type SetNewHookResponse = GetIrcResponse<command::SetNewHook>;
 impl Handler<SetNewHookResponse> for Irc {
-    type Result = MessageResult<SetNewHookResponse>;
+    type Result = <SetNewHookResponse as Message>::Result;
 
     fn handle(&mut self, msg: SetNewHookResponse, ctx: &mut Self::Context) -> Self::Result {
         let SetNewHookResponse {target, from, is_pm, cmd} = msg;
         let command::SetNewHook {id, title, version, code} = cmd;
 
         let put_vn = actors::db::PutVn { id, title };
-        let put_vn = self.db.call_fut(put_vn).into_actor(self);
+        let put_vn = self.db.send(put_vn).into_actor(self);
         let put_vn = put_vn.map(move |result, _act, ctx| match result {
             Ok(result) => ctx.notify(SetHookForVnResponse::new(target, from, is_pm, command::SetVnHook { vn: result, version, code })),
             Err(error) => ctx.notify(TextResponse::new(target, from, is_pm, command::Text::error(error))),
@@ -435,14 +433,14 @@ impl Handler<SetNewHookResponse> for Irc {
 
 type SetHookByNewIdResponse = GetIrcResponse<command::SetHookByNewId>;
 impl Handler<SetHookByNewIdResponse> for Irc {
-    type Result = MessageResult<SetHookByNewIdResponse>;
+    type Result = <SetHookByNewIdResponse as Message>::Result;
 
     fn handle(&mut self, msg: SetHookByNewIdResponse, ctx: &mut Self::Context) -> Self::Result {
         let SetHookByNewIdResponse {target, from, is_pm, cmd} = msg;
         let command::SetHookByNewId {id, version, code} = cmd;
 
         let get_vn = actors::vndb::Get::vn_by_id(id);
-        let get_vn = self.vndb.call_fut(get_vn.into()).into_actor(self);
+        let get_vn = self.vndb.send(get_vn.into()).into_actor(self);
         let get_vn = get_vn.map(move |result, _act, ctx| match result {
             Ok(results) => match results {
                 actors::vndb::Response::Results(result) => match result.vn() {
@@ -480,14 +478,14 @@ impl Handler<SetHookByNewIdResponse> for Irc {
 
 type SetHookByIdResponse = GetIrcResponse<command::SetHookById>;
 impl Handler<SetHookByIdResponse> for Irc {
-    type Result = MessageResult<SetHookByIdResponse>;
+    type Result = <SetHookByIdResponse as Message>::Result;
 
     fn handle(&mut self, msg: SetHookByIdResponse, ctx: &mut Self::Context) -> Self::Result {
         let SetHookByIdResponse {target, from, is_pm, cmd} = msg;
         let command::SetHookById {id, version, code} = cmd;
 
         let get_vn = actors::db::GetVnData(id);
-        let get_vn = self.db.call_fut(get_vn).into_actor(self);
+        let get_vn = self.db.send(get_vn).into_actor(self);
         let get_vn = get_vn.map(move |result, _act, ctx| match result {
             Ok(Some(result)) => ctx.notify(SetHookForVnResponse::new(target, from, is_pm, command::SetVnHook { vn: result.data, version, code})),
             Ok(None) => ctx.notify(SetHookByNewIdResponse::new(target, from, is_pm, command::SetHookByNewId { id, version, code })),
@@ -507,14 +505,14 @@ impl Handler<SetHookByIdResponse> for Irc {
 //.hook
 type GetHookByExactVndbTitleResponse = GetIrcResponse<command::GetHookByExactVndbTitle>;
 impl Handler<GetHookByExactVndbTitleResponse> for Irc {
-    type Result = MessageResult<GetHookByExactVndbTitleResponse>;
+    type Result = <GetHookByExactVndbTitleResponse as Message>::Result;
 
     fn handle(&mut self, msg: GetHookByExactVndbTitleResponse, ctx: &mut Self::Context) -> Self::Result {
         let GetHookByExactVndbTitleResponse {target, from, is_pm, cmd} = msg;
         let title = cmd.title;
 
         let get_vn = actors::vndb::Get::vn_by_exact_title(&title);
-        let get_vn = self.vndb.call_fut(get_vn.into()).into_actor(self);
+        let get_vn = self.vndb.send(get_vn.into()).into_actor(self);
         let get_vn = get_vn.map(move |result, _act, ctx| match result {
             Ok(results) => match results {
                 actors::vndb::Response::Results(result) => match result.vn() {
@@ -549,14 +547,14 @@ impl Handler<GetHookByExactVndbTitleResponse> for Irc {
 
 type GetHookByVndbTitleResponse = GetIrcResponse<command::GetHookByVndbTitle>;
 impl Handler<GetHookByVndbTitleResponse> for Irc {
-    type Result = MessageResult<GetHookByVndbTitleResponse>;
+    type Result = <GetHookByVndbTitleResponse as Message>::Result;
 
     fn handle(&mut self, msg: GetHookByVndbTitleResponse, ctx: &mut Self::Context) -> Self::Result {
         let GetHookByVndbTitleResponse {target, from, is_pm, cmd} = msg;
         let title = cmd.title;
 
         let search_vn = actors::vndb::Get::vn_by_title(&title);
-        let search_vn = self.vndb.call_fut(search_vn.into()).into_actor(self);
+        let search_vn = self.vndb.send(search_vn.into()).into_actor(self);
         let search_vn = search_vn.map(move |result, _act, ctx| match result {
             Ok(results) => match results {
                 actors::vndb::Response::Results(result) => match result.vn() {
@@ -592,14 +590,14 @@ impl Handler<GetHookByVndbTitleResponse> for Irc {
 
 type GetHookByTitleResponse = GetIrcResponse<command::GetHookByTitle>;
 impl Handler<GetHookByTitleResponse> for Irc {
-    type Result = MessageResult<GetHookByTitleResponse>;
+    type Result = <GetHookByTitleResponse as Message>::Result;
 
     fn handle(&mut self, msg: GetHookByTitleResponse, ctx: &mut Self::Context) -> Self::Result {
         let GetHookByTitleResponse {target, from, is_pm, cmd} = msg;
         let title = cmd.title;
 
         let search_vn = actors::db::SearchVn(title.clone());
-        let search_vn = self.db.call_fut(search_vn).into_actor(self);
+        let search_vn = self.db.send(search_vn).into_actor(self);
         let search_vn = search_vn.map(move |result, _act, ctx| match result {
             Ok(vns) => match vns.len() {
                 0 => ctx.notify(GetHookByExactVndbTitleResponse::new(target, from, is_pm, command::GetHookByExactVndbTitle { title })),
@@ -621,13 +619,13 @@ impl Handler<GetHookByTitleResponse> for Irc {
 
 type GetHookForVnResponse = GetIrcResponse<actors::db::models::Vn>;
 impl Handler<GetHookForVnResponse> for Irc {
-    type Result = MessageResult<GetHookForVnResponse>;
+    type Result = <GetHookForVnResponse as Message>::Result;
 
     fn handle(&mut self, msg: GetHookForVnResponse, ctx: &mut Self::Context) -> Self::Result {
         let GetHookForVnResponse {target, from, is_pm, cmd} = msg;
 
         let get_vn = actors::db::GetHooks(cmd);
-        let get_vn = self.db.call_fut(get_vn).into_actor(self);
+        let get_vn = self.db.send(get_vn).into_actor(self);
         let get_vn = get_vn.map(move |result, _act, ctx| match result {
             Ok(result) => ctx.notify(TextResponse::new(target, from, is_pm, command::Text::from_vn_data(result))),
             Err(error) => ctx.notify(TextResponse::new(target, from, is_pm, command::Text::error(error))),
@@ -642,14 +640,14 @@ impl Handler<GetHookForVnResponse> for Irc {
 
 type GetHookByIdResponse = GetIrcResponse<command::GetHookById>;
 impl Handler<GetHookByIdResponse> for Irc {
-    type Result = MessageResult<GetHookByIdResponse>;
+    type Result = <GetHookByIdResponse as Message>::Result;
 
     fn handle(&mut self, msg: GetHookByIdResponse, ctx: &mut Self::Context) -> Self::Result {
         let GetHookByIdResponse {target, from, is_pm, cmd} = msg;
         let id = cmd.id;
 
         let get_vn = actors::db::GetVnData(id);
-        let get_vn = self.db.call_fut(get_vn).into_actor(self);
+        let get_vn = self.db.send(get_vn).into_actor(self);
         let get_vn = get_vn.map(move |result, _act, ctx| match result {
             Ok(Some(result)) => ctx.notify(TextResponse::new(target, from, is_pm, command::Text::from_vn_data(result))),
             Ok(None) => ctx.notify(TextResponse::new(target, from, is_pm, "No hook exists for VN".into())),
@@ -669,14 +667,14 @@ impl Handler<GetHookByIdResponse> for Irc {
 //.del_hook
 type DelHookByExactVndbTitleResponse = GetIrcResponse<command::DelHookByExactVndbTitle>;
 impl Handler<DelHookByExactVndbTitleResponse> for Irc {
-    type Result = MessageResult<DelHookByExactVndbTitleResponse>;
+    type Result = <DelHookByExactVndbTitleResponse as Message>::Result;
 
     fn handle(&mut self, msg: DelHookByExactVndbTitleResponse, ctx: &mut Self::Context) -> Self::Result {
         let DelHookByExactVndbTitleResponse {target, from, is_pm, cmd} = msg;
         let command::DelHookByExactVndbTitle {title, version} = cmd;
 
         let get_vn = actors::vndb::Get::vn_by_exact_title(&title);
-        let get_vn = self.vndb.call_fut(get_vn.into()).into_actor(self);
+        let get_vn = self.vndb.send(get_vn.into()).into_actor(self);
         let get_vn = get_vn.map(move |result, _act, ctx| match result {
             Ok(results) => match results {
                 actors::vndb::Response::Results(result) => match result.vn() {
@@ -711,14 +709,14 @@ impl Handler<DelHookByExactVndbTitleResponse> for Irc {
 
 type DelHookByVndbTitleResponse = GetIrcResponse<command::DelHookByVndbTitle>;
 impl Handler<DelHookByVndbTitleResponse> for Irc {
-    type Result = MessageResult<DelHookByVndbTitleResponse>;
+    type Result = <DelHookByVndbTitleResponse as Message>::Result;
 
     fn handle(&mut self, msg: DelHookByVndbTitleResponse, ctx: &mut Self::Context) -> Self::Result {
         let DelHookByVndbTitleResponse {target, from, is_pm, cmd} = msg;
         let command::DelHookByVndbTitle {title, version} = cmd;
 
         let search_vn = actors::vndb::Get::vn_by_title(&title);
-        let search_vn = self.vndb.call_fut(search_vn.into()).into_actor(self);
+        let search_vn = self.vndb.send(search_vn.into()).into_actor(self);
         let search_vn = search_vn.map(move |result, _act, ctx| match result {
             Ok(results) => match results {
                 actors::vndb::Response::Results(result) => match result.vn() {
@@ -754,14 +752,14 @@ impl Handler<DelHookByVndbTitleResponse> for Irc {
 
 type DelHookByTitleResponse = GetIrcResponse<command::DelHookByTitle>;
 impl Handler<DelHookByTitleResponse> for Irc {
-    type Result = MessageResult<DelHookByTitleResponse>;
+    type Result = <DelHookByTitleResponse as Message>::Result;
 
     fn handle(&mut self, msg: DelHookByTitleResponse, ctx: &mut Self::Context) -> Self::Result {
         let DelHookByTitleResponse {target, from, is_pm, cmd} = msg;
         let command::DelHookByTitle {title, version} = cmd;
 
         let search_vn = actors::db::SearchVn(title.clone());
-        let search_vn = self.db.call_fut(search_vn).into_actor(self);
+        let search_vn = self.db.send(search_vn).into_actor(self);
         let search_vn = search_vn.map(move |result, _act, ctx| match result {
             Ok(vns) => match vns.len() {
                 0 => ctx.notify(DelHookByExactVndbTitleResponse::new(target, from, is_pm, command::DelHookByExactVndbTitle { title, version })),
@@ -783,14 +781,14 @@ impl Handler<DelHookByTitleResponse> for Irc {
 
 type DelHookByIdResponse = GetIrcResponse<command::DelHookById>;
 impl Handler<DelHookByIdResponse> for Irc {
-    type Result = MessageResult<DelHookByIdResponse>;
+    type Result = <DelHookByIdResponse as Message>::Result;
 
     fn handle(&mut self, msg: DelHookByIdResponse, ctx: &mut Self::Context) -> Self::Result {
         let DelHookByIdResponse {target, from, is_pm, cmd} = msg;
         let command::DelHookById {id, version} = cmd;
 
         let get_vn = actors::db::GetVn(id);
-        let get_vn = self.db.call_fut(get_vn).into_actor(self);
+        let get_vn = self.db.send(get_vn).into_actor(self);
         let get_vn = get_vn.map(move |result, _act, ctx| match result {
             Ok(Some(vn)) => ctx.notify(DelVnHookResponse::new(target, from, is_pm, command::DelVnHook { vn, version })),
             Ok(None) => ctx.notify(TextResponse::new(target, from, is_pm, format!("No hook already for v{}", id).into())),
@@ -809,7 +807,7 @@ impl Handler<DelHookByIdResponse> for Irc {
 
 type DelVnHookResponse = GetIrcResponse<command::DelVnHook>;
 impl Handler<DelVnHookResponse> for Irc {
-    type Result = MessageResult<DelVnHookResponse>;
+    type Result = <DelVnHookResponse as Message>::Result;
 
     fn handle(&mut self, msg: DelVnHookResponse, ctx: &mut Self::Context) -> Self::Result {
         let DelVnHookResponse {target, from, is_pm, cmd} = msg;
@@ -818,7 +816,7 @@ impl Handler<DelVnHookResponse> for Irc {
 
         info!("Attempt to remove hook '{}' for VN {}", &version, &vn.title);
         let del_hook = actors::db::DelHook { vn, version };
-        let del_hook = self.db.call_fut(del_hook).into_actor(self);
+        let del_hook = self.db.send(del_hook).into_actor(self);
         let del_hook = del_hook.map(move |result, _act, ctx| match result {
             Ok(0) => ctx.notify(TextResponse::new(target, from, is_pm, format!("v{}: No such hook to remove", id).into())),
             Ok(_) => ctx.notify(TextResponse::new(target, from, is_pm, format!("v{}: Removed hook", id).into())),
@@ -838,14 +836,14 @@ impl Handler<DelVnHookResponse> for Irc {
 //.del_vn
 type DelVnByExactVndbTitleResponse = GetIrcResponse<command::DelVnByExactVndbTitle>;
 impl Handler<DelVnByExactVndbTitleResponse> for Irc {
-    type Result = MessageResult<DelVnByExactVndbTitleResponse>;
+    type Result = <DelVnByExactVndbTitleResponse as Message>::Result;
 
     fn handle(&mut self, msg: DelVnByExactVndbTitleResponse, ctx: &mut Self::Context) -> Self::Result {
         let DelVnByExactVndbTitleResponse {target, from, is_pm, cmd} = msg;
         let title = cmd.title;
 
         let get_vn = actors::vndb::Get::vn_by_exact_title(&title);
-        let get_vn = self.vndb.call_fut(get_vn.into()).into_actor(self);
+        let get_vn = self.vndb.send(get_vn.into()).into_actor(self);
         let get_vn = get_vn.map(move |result, _act, ctx| match result {
             Ok(results) => match results {
                 actors::vndb::Response::Results(result) => match result.vn() {
@@ -880,14 +878,14 @@ impl Handler<DelVnByExactVndbTitleResponse> for Irc {
 
 type DelVnByVndbTitleResponse = GetIrcResponse<command::DelVnByVndbTitle>;
 impl Handler<DelVnByVndbTitleResponse> for Irc {
-    type Result = MessageResult<DelVnByVndbTitleResponse>;
+    type Result = <DelVnByVndbTitleResponse as Message>::Result;
 
     fn handle(&mut self, msg: DelVnByVndbTitleResponse, ctx: &mut Self::Context) -> Self::Result {
         let DelVnByVndbTitleResponse {target, from, is_pm, cmd} = msg;
         let title = cmd.title;
 
         let search_vn = actors::vndb::Get::vn_by_title(&title);
-        let search_vn = self.vndb.call_fut(search_vn.into()).into_actor(self);
+        let search_vn = self.vndb.send(search_vn.into()).into_actor(self);
         let search_vn = search_vn.map(move |result, _act, ctx| match result {
             Ok(results) => match results {
                 actors::vndb::Response::Results(result) => match result.vn() {
@@ -923,14 +921,14 @@ impl Handler<DelVnByVndbTitleResponse> for Irc {
 
 type DelVnByTitleResponse = GetIrcResponse<command::DelVnByTitle>;
 impl Handler<DelVnByTitleResponse> for Irc {
-    type Result = MessageResult<DelVnByTitleResponse>;
+    type Result = <DelVnByTitleResponse as Message>::Result;
 
     fn handle(&mut self, msg: DelVnByTitleResponse, ctx: &mut Self::Context) -> Self::Result {
         let DelVnByTitleResponse {target, from, is_pm, cmd} = msg;
         let title = cmd.title;
 
         let search_vn = actors::db::SearchVn(title.clone());
-        let search_vn = self.db.call_fut(search_vn).into_actor(self);
+        let search_vn = self.db.send(search_vn).into_actor(self);
         let search_vn = search_vn.map(move |result, _act, ctx| match result {
             Ok(vns) => match vns.len() {
                 0 => ctx.notify(DelVnByExactVndbTitleResponse::new(target, from, is_pm, command::DelVnByExactVndbTitle { title })),
@@ -952,14 +950,14 @@ impl Handler<DelVnByTitleResponse> for Irc {
 
 type DelVnByIdResponse = GetIrcResponse<command::DelVnById>;
 impl Handler<DelVnByIdResponse> for Irc {
-    type Result = MessageResult<DelVnByIdResponse>;
+    type Result = <DelVnByIdResponse as Message>::Result;
 
     fn handle(&mut self, msg: DelVnByIdResponse, ctx: &mut Self::Context) -> Self::Result {
         let DelVnByIdResponse {target, from, is_pm, cmd} = msg;
         let id = cmd.id;
 
         let del_vn = actors::db::DelVnData(id);
-        let del_vn = self.db.call_fut(del_vn).into_actor(self);
+        let del_vn = self.db.send(del_vn).into_actor(self);
         let del_vn = del_vn.map(move |result, _act, ctx| match result {
             Ok(_) => {
                 let text = format!("Removed v{} from DB", id);
@@ -981,7 +979,7 @@ impl Handler<DelVnByIdResponse> for Irc {
 //References
 type GetRefResponse = GetIrcResponse<command::Ref>;
 impl Handler<GetRefResponse> for Irc {
-    type Result = MessageResult<GetRefResponse>;
+    type Result = <GetRefResponse as Message>::Result;
 
     fn handle(&mut self, msg: GetRefResponse, ctx: &mut Self::Context) -> Self::Result {
         let GetRefResponse {target, from, is_pm, cmd} = msg;
@@ -989,7 +987,7 @@ impl Handler<GetRefResponse> for Irc {
         let kind = cmd.kind;
 
         let get_ref = actors::vndb::Get::get_by_id(kind.clone(), id);
-        let get_ref = self.vndb.call_fut(get_ref.into()).into_actor(self);
+        let get_ref = self.vndb.send(get_ref.into()).into_actor(self);
         let get_ref = get_ref.map(move |result, _act, ctx| match result {
             Ok(results) => match results {
                 actors::vndb::Response::Results(result) => {

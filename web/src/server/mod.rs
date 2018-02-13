@@ -40,8 +40,8 @@ use templates::Template;
 
 #[derive(Clone)]
 struct State {
-    pub db: self::actix::SyncAddress<actors::db::Db>,
-    pub vndb: self::actix::SyncAddress<actors::vndb::Vndb>
+    pub db: self::actix::Addr<actix::Syn, actors::db::Db>,
+    pub vndb: self::actix::Addr<actix::Syn, actors::vndb::Vndb>
 }
 
 fn internal_error(description: String) -> HttpResponse {
@@ -96,7 +96,7 @@ fn search(request: HttpRequest<State>) -> Box<Future<Item=HttpResponse, Error=Ht
 
     let query = query.to_string();
 
-    request.state().db.call_fut(actors::db::SearchVn(query.clone()))
+    request.state().db.send(actors::db::SearchVn(query.clone()))
                       .and_then(move |result| match result {
                           Ok(result) => {
                               let template = templates::Search::new(&query, result);
@@ -119,7 +119,7 @@ fn search_vndb(request: HttpRequest<State>) -> Box<Future<Item=HttpResponse, Err
 
     let query = query.to_string();
 
-    request.state().vndb.call_fut(actors::vndb::Get::vn_by_title(&query).into())
+    request.state().vndb.send(actors::vndb::Get::vn_by_title(&query).into())
                         .and_then(move |result| match result {
                             Ok(result) => match result {
                                 actors::vndb::Response::Results(result) => match result.vn() {
@@ -149,7 +149,7 @@ fn vn(request: HttpRequest<State>) -> Box<Future<Item=HttpResponse, Error=HttpEr
         Err(_) => return Box::new(future::result(templates::NotFound::new().handle(request.clone())))
     };
 
-    request.state().db.call_fut(actors::db::GetVnData(id))
+    request.state().db.send(actors::db::GetVnData(id))
                       .and_then(|result| match result {
                           Ok(Some(result)) => {
                               let template = templates::Vn::new(&result.data.title, result.hooks);
