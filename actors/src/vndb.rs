@@ -125,7 +125,7 @@ impl StreamHandler<protocol::message::Response, io::Error> for Vndb {
         ctx.stop();
     }
 
-    fn error(&mut self, error: io::Error, ctx: &mut Self::Context) -> ErrorAction {
+    fn error(&mut self, error: io::Error, ctx: &mut Self::Context) -> Running {
         warn!("VNDB: IO error: {}", error);
 
         if let Some(tx) = self.queue.pop_front() {
@@ -134,7 +134,7 @@ impl StreamHandler<protocol::message::Response, io::Error> for Vndb {
 
         ctx.stop();
 
-        ErrorAction::Stop
+        Running::Stop
     }
 
     fn handle(&mut self, msg: protocol::message::Response, _: &mut Self::Context) {

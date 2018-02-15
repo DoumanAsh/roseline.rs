@@ -67,10 +67,10 @@ impl StreamHandler<IrcMessage, IrcError> for Irc {
         ctx.stop();
     }
 
-    fn error(&mut self, error: IrcError, ctx: &mut Self::Context) -> ErrorAction {
+    fn error(&mut self, error: IrcError, ctx: &mut Self::Context) -> Running {
         warn!("IRC: Reading IO error: {}", error);
         ctx.stop();
-        ErrorAction::Stop
+        Running::Stop
     }
 
     fn handle(&mut self, msg: IrcMessage, ctx: &mut Self::Context) {
