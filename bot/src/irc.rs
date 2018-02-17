@@ -103,12 +103,9 @@ impl StreamHandler<IrcMessage, IrcError> for Irc {
                     command::Command::DelHookById(del_hook) => ctx.notify(DelHookByIdResponse::new(target, from, is_pm, del_hook)),
                     command::Command::DelVnByTitle(del_vn) => ctx.notify(DelVnByTitleResponse::new(target, from, is_pm, del_vn)),
                     command::Command::DelVnById(del_vn) => ctx.notify(DelVnByIdResponse::new(target, from, is_pm, del_vn)),
-                    command::Command::Refs(refs) => for reference in refs.refs.iter() {
-                        if let &Some(ref reference) = reference {
-                            let reference = command::Ref {
-                                kind: reference.0.clone(),
-                                id: reference.1
-                            };
+                    command::Command::Refs(mut refs) => for reference in &mut refs.refs {
+                        let reference = reference.take();
+                        if let Some(reference) = reference {
                             ctx.notify(GetRefResponse::new(target.clone(), from.clone(), is_pm, reference));
                         }
                         else {
@@ -983,8 +980,7 @@ impl Handler<GetRefResponse> for Irc {
 
     fn handle(&mut self, msg: GetRefResponse, ctx: &mut Self::Context) -> Self::Result {
         let GetRefResponse {target, from, is_pm, cmd} = msg;
-        let id = cmd.id;
-        let kind = cmd.kind;
+        let command::Ref {kind, id, url} = cmd;
 
         let get_ref = actors::vndb::Get::get_by_id(kind.clone(), id);
         let get_ref = self.vndb.send(get_ref.into()).into_actor(self);
@@ -998,7 +994,10 @@ impl Handler<GetRefResponse> for Irc {
 
                     let kind = kind.short();
                     let id = item.get("id").unwrap();
-                    let text = format!("{0}{1}: {2} - https://vndb.org/{0}{1}", kind, id, name);
+                    let text = match url {
+                        true => format!("{0}{1}: {2} - https://vndb.org/{0}{1}", kind, id, name),
+                        false => format!("{0}{1}: {2}", kind, id, name),
+                    };
                     ctx.notify(TextResponse::new(target, from, is_pm, text.into()))
                 },
                 other => {
@@ -1008,7 +1007,7 @@ impl Handler<GetRefResponse> for Irc {
             },
             Err(error) => {
                 warn!("GetRefResponse Error: '{}'. Re-try", error);
-                let cmd = command::Ref {id, kind};
+                let cmd = command::Ref {id, kind, url};
                 ctx.notify_later(GetRefResponse::new(target, from, is_pm, cmd), duration::ms(CMD_DELAY_MS));
             }
         }).map_err(|error, _act, _ctx| {

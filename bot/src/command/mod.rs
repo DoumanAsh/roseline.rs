@@ -23,15 +23,17 @@ pub struct GetVn {
     pub title: String
 }
 
+#[derive(Clone)]
 pub struct Ref {
     pub kind: VndbRequestType,
-    pub id: u64
+    pub id: u64,
+    pub url: bool,
 }
 
 #[derive(Default)]
 ///Retrieves references to VNDB objects
 pub struct Refs {
-    pub refs: [Option<(VndbRequestType, u64)>; 5]
+    pub refs: [Option<Ref>; 5]
 }
 
 ///Responds with some text
@@ -222,7 +224,7 @@ impl Command {
     pub fn from_str(text: &str) -> Option<Command> {
         lazy_static! {
             static ref EXTRACT_CMD: regex::Regex = regex::Regex::new("^\\s*\\.([^\\s]*)(\\s+(.+))*").unwrap();
-            static ref EXTRACT_REFERENCE: regex::Regex = regex::Regex::new("(^|[a-z]/|\\s)([vcrpu])([0-9]+)").unwrap();
+            static ref EXTRACT_REFERENCE: regex::Regex = regex::Regex::new("(^|vndb\\.org/|\\s)([vcrpu])([0-9]+)").unwrap();
             static ref EXTRACT_VN_ID: regex::Regex = regex::Regex::new("^v([0-9]+)$").unwrap();
         }
 
@@ -329,7 +331,7 @@ impl Command {
             let mut result_idx = 0;
 
             for capture in EXTRACT_REFERENCE.captures_iter(text) {
-                let typ = match capture.get(2) {
+                let kind = match capture.get(2) {
                     Some(typ) => match typ.as_str() {
                         "v" => VndbRequestType::vn(),
                         "c" => VndbRequestType::character(),
@@ -347,8 +349,12 @@ impl Command {
                     },
                     None => continue
                 };
+                let url = match capture.get(1) {
+                    Some(prefix) => prefix.as_str().trim().is_empty(),
+                    None => true
+                };
 
-                result.refs[result_idx] = Some((typ, id));
+                result.refs[result_idx] = Some(Ref { kind, id, url });
                 result_idx += 1;
 
                 if result_idx > 4 {
@@ -422,10 +428,10 @@ mod tests {
     #[test]
     fn should_cmd_vn_ref() {
         let expected_refs = [
-            Some((VndbRequestType::vn(), 1u64)),
-            Some((VndbRequestType::vn(), 2u64)),
-            Some((VndbRequestType::user(), 55u64)),
-            Some((VndbRequestType::character(), 25u64)),
+            Some((VndbRequestType::vn(), 1u64, true)),
+            Some((VndbRequestType::vn(), 2u64, true)),
+            Some((VndbRequestType::user(), 55u64, true)),
+            Some((VndbRequestType::character(), 25u64, true)),
             None
         ];
 
@@ -444,8 +450,9 @@ mod tests {
             if let Some(ref expected) = expected.as_ref() {
                 let reference = reference.as_ref().unwrap();
 
-                assert_eq!(reference.0.short(), expected.0.short());
-                assert_eq!(reference.1, expected.1);
+                assert_eq!(reference.kind.short(), expected.0.short());
+                assert_eq!(reference.id, expected.1);
+                assert_eq!(reference.url, expected.2);
             }
         }
 
@@ -466,12 +473,16 @@ mod tests {
         let first = unsafe { result.get_unchecked(0) };
         assert!(first.is_some());
         let first = first.as_ref().unwrap();
-        assert_eq!(first.0.short(), "v");
-        assert_eq!(first.1, 125);
+        assert_eq!(first.kind.short(), "v");
+        assert_eq!(first.id, 125);
+        assert_eq!(first.url, false);
 
         for reference in result.iter().skip(1) {
             assert!(reference.is_none());
         }
+
+        let result = Command::from_str("Try this https://youtu.be/u7mDRIuXOUY");
+        assert!(result.is_none());
     }
 
     #[test]
