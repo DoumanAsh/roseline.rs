@@ -21,7 +21,7 @@ vndb = "0"
 native-tls = "0"
 trust-dns-resolver = "0"
 
-actix = { git = "https://github.com/actix/actix" }
+actix = "0"
 
 [dependencies.log]
 version = "0"

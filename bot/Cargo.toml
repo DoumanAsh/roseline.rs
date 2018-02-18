@@ -14,7 +14,7 @@ path = "../utils"
 [dependencies]
 vndb = "0"
 
-actix = { git = "https://github.com/actix/actix" }
+actix = "0"
 futures = "0"
 
 lazy_static = "1"

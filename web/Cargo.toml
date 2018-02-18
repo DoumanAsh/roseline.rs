@@ -32,7 +32,7 @@ askama = "0"
 vndb = "0"
 
 http = "0"
-actix = { git = "https://github.com/actix/actix" }
+actix = "0"
 
 [dependencies.actix-web]
 git = "https://github.com/actix/actix-web"
