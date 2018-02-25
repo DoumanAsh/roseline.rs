@@ -7,6 +7,8 @@ use self::actix::prelude::*;
 use self::db::Db as InnerDb;
 pub use self::db::models;
 
+use ::fmt;
+
 pub struct Db {
     inner: InnerDb,
 }
@@ -27,11 +29,34 @@ impl Actor for Db {
     type Context = SyncContext<Self>;
 }
 
-///Result of `GetVn` Command
+///Result of `GetVnData` Command
 pub struct VnData {
     pub data: models::Vn,
     pub hooks: Vec<models::Hook>
 }
+
+impl fmt::Display for VnData {
+    fn fmt(&self, f: &mut ::fmt::Formatter) -> fmt::Result {
+        match self.hooks.len() {
+            0 => write!(f, "No hook exists for VN '{}'", self.data.title),
+            1 => {
+                let hook = unsafe { self.hooks.get_unchecked(0) };
+                write!(f, "{} - {}", self.data.title, hook.code)
+            },
+            _ => {
+                let mut text = format!("{} - ", self.data.title);
+
+                for hook in self.hooks.iter() {
+                    text.push_str(&format!("{}: {} | ", hook.version, hook.code));
+                }
+
+                write!(f, "{}", &text[..text.len()-3])
+            }
+        }
+
+    }
+}
+
 
 ///Retrieves all information about VN
 pub struct GetVnData(pub u64);

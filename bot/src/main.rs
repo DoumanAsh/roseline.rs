@@ -12,14 +12,18 @@ extern crate actors;
 
 use utils::log;
 
-use actix::{Supervisor};
+use actix::{Supervisor, Actor};
 
+use std::collections;
+use std::thread;
 use std::fmt;
 use std::mem;
 
 mod config;
 mod command;
+mod handler;
 mod irc;
+mod discord;
 
 fn run() -> Result<i32, String> {
     let _log_guard = log::init();
@@ -27,9 +31,20 @@ fn run() -> Result<i32, String> {
     let config = config::load()?;
     let system = actix::System::new("roseline");
 
-    let db: actix::Addr<actix::Syn, _> = actors::db::Db::start_threaded(1);
+    let db: actix::Addr<actix::Syn, _> = actors::db::Db::start_threaded(2);
     let vndb: actix::Addr<actix::Unsync, _> = Supervisor::start(|_| actors::vndb::Vndb::new());
-    let _irc: actix::Addr<actix::Unsync, _> = Supervisor::start(|_| irc::Irc::new(config, vndb, db));
+    let executor: actix::Addr<actix::Syn, _> = handler::Executor::new(vndb.clone(), db.clone()).start();
+    let executor_clone = executor.clone();
+    let _irc: actix::Addr<actix::Unsync, _> = Supervisor::start(move |_| irc::Irc::new(config, executor_clone));
+
+    thread::spawn(move || {
+        loop {
+            let mut client = discord::client(executor.clone());
+            if let Err(why) = client.start() {
+                println!("An error occurred while running the client: {:?}", why);
+            }
+        }
+    });
 
     Ok(system.run())
 }

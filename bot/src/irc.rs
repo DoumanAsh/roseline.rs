@@ -21,8 +21,11 @@ use self::irc::error::IrcError;
 use self::irc::client::ext::ClientExt;
 use self::utils::duration;
 
+use ::collections::HashSet;
+
 use ::config::Config;
 use ::command;
+use ::handler;
 
 macro_rules! try_option {
     ($result:expr, $warn:expr) => { match $result {
@@ -34,22 +37,23 @@ macro_rules! try_option {
     }}
 }
 
-const CMD_DELAY_MS: u64 = 500;
-
 pub struct Irc {
     config: Config,
-    vndb: Addr<Unsync, actors::vndb::Vndb>,
-    db: Addr<Syn, actors::db::Db>,
-    client: Option<IrcClient>
+    handler: Addr<actix::Syn, handler::Executor>,
+    client: Option<IrcClient>,
+    ignores: HashSet<String>
 }
 
 impl Irc {
-    pub fn new(config: Config, vndb: Addr<Unsync, actors::vndb::Vndb>, db: Addr<Syn, actors::db::Db>) -> Self {
+    pub fn new(config: Config, handler: Addr<Syn, handler::Executor>) -> Self {
+        let mut ignores = HashSet::new();
+        ignores.insert("Fltrsh".to_string());
+
         Self {
             config,
-            vndb,
-            db,
-            client: None
+            handler,
+            client: None,
+            ignores
         }
     }
 }
@@ -84,25 +88,44 @@ impl StreamHandler<IrcMessage, IrcError> for Irc {
             Command::PRIVMSG(target, msg) => {
                 info!("from {:?} to {}: {}", from, target, msg);
 
+                let from = from.unwrap().to_string();
+
+                if self.ignores.contains(&from) {
+                    return;
+                }
+
                 let cmd = match command::Command::from_str(&msg) {
                     Some(cmd) => cmd,
                     None => return
                 };
 
                 let is_pm = client.current_nickname() == target;
-                let from = from.unwrap().to_string();
 
                 match cmd {
                     command::Command::Text(text) => ctx.notify(TextResponse::new(target, from, is_pm, text)),
                     command::Command::GetVn(get_vn) => ctx.notify(GetVnResponse::new(target, from, is_pm, get_vn)),
-                    command::Command::GetHookByTitle(get_hook) => ctx.notify(GetHookByTitleResponse::new(target, from, is_pm, get_hook)),
-                    command::Command::GetHookById(get_hook) => ctx.notify(GetHookByIdResponse::new(target, from, is_pm, get_hook)),
-                    command::Command::SetHookByTitle(set_hook) => ctx.notify(SetHookByTitleResponse::new(target, from, is_pm, set_hook)),
-                    command::Command::SetHookById(set_hook) => ctx.notify(SetHookByIdResponse::new(target, from, is_pm, set_hook)),
-                    command::Command::DelHookByTitle(del_hook) => ctx.notify(DelHookByTitleResponse::new(target, from, is_pm, del_hook)),
-                    command::Command::DelHookById(del_hook) => ctx.notify(DelHookByIdResponse::new(target, from, is_pm, del_hook)),
-                    command::Command::DelVnByTitle(del_vn) => ctx.notify(DelVnByTitleResponse::new(target, from, is_pm, del_vn)),
-                    command::Command::DelVnById(del_vn) => ctx.notify(DelVnByIdResponse::new(target, from, is_pm, del_vn)),
+                    command::Command::GetHook(get_hook) => ctx.notify(GetHookResponse::new(target, from, is_pm, get_hook)),
+                    command::Command::SetHook(set_hook) => ctx.notify(SetHookResponse::new(target, from, is_pm, set_hook)),
+                    command::Command::DelHook(del_hook) => ctx.notify(DelHookResponse::new(target, from, is_pm, del_hook)),
+                    command::Command::DelVn(del_vn) => ctx.notify(DelVnResponse::new(target, from, is_pm, del_vn)),
+                    command::Command::Ignore(name) => match self.ignores.contains(&name) {
+                        true => {
+                            let text = format!("Removed '{}' from ignore list", name);
+                            self.ignores.remove(&name);
+                            ctx.notify(TextResponse::new(target, from, is_pm, text.into()))
+                        },
+                        false => {
+                            let text = format!("Added '{}' to ignore list", name);
+                            self.ignores.insert(name);
+                            ctx.notify(TextResponse::new(target, from, is_pm, text.into()))
+                        }
+                    },
+                    command::Command::IgnoreList => {
+                        let list = self.ignores.iter().map(String::as_str).collect::<Vec<_>>();
+                        let list = &list[..];
+                        let text = format!("Ignore list: {}", list.join(", "));
+                        ctx.notify(TextResponse::new(target, from, is_pm, text.into()))
+                    },
                     command::Command::Refs(mut refs) => for reference in &mut refs.refs {
                         let reference = reference.take();
                         if let Some(reference) = reference {
@@ -184,645 +207,86 @@ impl Handler<GetVnResponse> for Irc {
         let GetVnResponse {target, from, is_pm, cmd} = msg;
         let title = cmd.title;
 
-        let get_vn = actors::vndb::Get::vn_by_exact_title(&title);
-        let get_vn = self.vndb.send(get_vn.into()).into_actor(self);
+        let get_vn = handler::FindVn::new(title);
+        let get_vn = self.handler.send(get_vn).into_actor(self);
         let get_vn = get_vn.map(move |result, _act, ctx| match result {
-            Ok(results) => match results {
-                actors::vndb::Response::Results(result) => match result.vn() {
-                    Ok(vn) => match vn.items.len() {
-                        1 => {
-                            let vn = unsafe { vn.items.get_unchecked(0) };
-                            let text = format!("{} - https://vndb.org/v{}", vn.title.as_ref().unwrap(), vn.id);
-                            ctx.notify(TextResponse::new(target, from, is_pm, text.into()))
-                        },
-                        _ => ctx.notify(SearchVnResponse::new(target, from, is_pm, command::SearchVn { title }))
-                    }
-                    Err(error) => ctx.notify(TextResponse::new(target, from, is_pm, command::Text::error(error)))
-                },
-                other => {
-                    error!("Unexpected VNDB response on get: {:?}", other);
-                    ctx.notify(TextResponse::new(target, from, is_pm, command::Text::bad_vndb()))
-                }
+            Ok(vn) => {
+                let text = format!("{} - https://vndb.org/v{}", vn.title.as_ref().unwrap(), vn.id);
+                ctx.notify(TextResponse::new(target, from, is_pm, text.into()))
             },
-            Err(error) => {
-                warn!("GetVnResponse Error: '{}'. Re-try", error);
-                ctx.notify_later(GetVnResponse::new(target, from, is_pm, command::GetVn{ title }), duration::ms(CMD_DELAY_MS));
-            }
+            Err(error) => ctx.notify(TextResponse::new(target, from, is_pm, format!("{}", error).into()))
         }).map_err(|error, _act, _ctx| {
-            error!("IRC: error processing GetVn: {}", error)
+            error!("IRC: error processing GetVn: {}", error);
         });
         ctx.spawn(get_vn);
-
-        Ok(())
-    }
-}
-
-type SearchVnResponse = GetIrcResponse<command::SearchVn>;
-impl Handler<SearchVnResponse> for Irc {
-    type Result = <SearchVnResponse as Message>::Result;
-
-    fn handle(&mut self, msg: SearchVnResponse, ctx: &mut Self::Context) -> Self::Result {
-        let SearchVnResponse {target, from, is_pm, cmd} = msg;
-        let title = cmd.title;
-
-        let search_vn = actors::vndb::Get::vn_by_title(&title);
-        let search_vn = self.vndb.send(search_vn.into()).into_actor(self);
-        let search_vn = search_vn.map(move |result, _act, ctx| match result {
-            Ok(results) => match results {
-                actors::vndb::Response::Results(result) => match result.vn() {
-                    Ok(vn) => match vn.items.len() {
-                        0 => ctx.notify(TextResponse::new(target, from, is_pm, command::Text::no_such_vn())),
-                        1 => {
-                            let vn = unsafe { vn.items.get_unchecked(0) };
-                            let text = format!("{} - https://vndb.org/v{}", vn.title.as_ref().unwrap(), vn.id);
-                            ctx.notify(TextResponse::new(target, from, is_pm, text.into()))
-                        },
-                        num => ctx.notify(TextResponse::new(target, from, is_pm, command::Text::too_many_vn_hits(num, title)))
-                    }
-                    Err(error) => ctx.notify(TextResponse::new(target, from, is_pm, command::Text::error(error)))
-                },
-                other => {
-                    error!("Unexpected VNDB response on get: {:?}", other);
-                    ctx.notify(TextResponse::new(target, from, is_pm, command::Text::bad_vndb()))
-                }
-            },
-            Err(error) => {
-                warn!("SearchVnResponse Error: '{}'. Re-try", error);
-                ctx.notify_later(SearchVnResponse::new(target, from, is_pm, command::SearchVn{ title }), duration::ms(CMD_DELAY_MS));
-            }
-        }).map_err(|error, _act, _ctx| {
-            error!("IRC: error processing SearchVn: {}", error)
-        });
-        ctx.spawn(search_vn);
 
         Ok(())
     }
 }
 
 //.set_hook
-type SetHookByExactVndbTitleResponse = GetIrcResponse<command::SetHookByExactVndbTitle>;
-impl Handler<SetHookByExactVndbTitleResponse> for Irc {
-    type Result = <SetHookByExactVndbTitleResponse as Message>::Result;
+type SetHookResponse = GetIrcResponse<command::SetHook>;
+impl Handler<SetHookResponse> for Irc {
+    type Result = <SetHookResponse as Message>::Result;
 
-    fn handle(&mut self, msg: SetHookByExactVndbTitleResponse, ctx: &mut Self::Context) -> Self::Result {
-        let SetHookByExactVndbTitleResponse {target, from, is_pm, cmd} = msg;
-        let command::SetHookByExactVndbTitle {title, version, code} = cmd;
+    fn handle(&mut self, msg: SetHookResponse, ctx: &mut Self::Context) -> Self::Result {
+        let SetHookResponse {target, from, is_pm, cmd} = msg;
+        let command::SetHook {title, version, code} = cmd;
 
-        let get_vn = actors::vndb::Get::vn_by_exact_title(&title);
-        let get_vn = self.vndb.send(get_vn.into()).into_actor(self);
-        let get_vn = get_vn.map(move |result, _act, ctx| match result {
-            Ok(results) => match results {
-                actors::vndb::Response::Results(result) => match result.vn() {
-                    Ok(mut vn) => match vn.items.len() {
-                        1 => {
-                            let vn = vn.items.pop().unwrap();
-                            let id = vn.id;
-                            let title = vn.title.unwrap();
-                            let set_new_hook = command::SetNewHook { id, title, version, code};
-                            ctx.notify(SetNewHookResponse::new(target, from, is_pm, set_new_hook))
-                        },
-                        _ => ctx.notify(SetHookByVndbTitleResponse::new(target, from, is_pm, command::SetHookByVndbTitle { title, version, code })),
-                    }
-                    Err(error) => ctx.notify(TextResponse::new(target, from, is_pm, command::Text::error(error)))
-                },
-                other => {
-                    error!("Unexpected VNDB response on get: {:?}", other);
-                    ctx.notify(TextResponse::new(target, from, is_pm, command::Text::bad_vndb()))
-                }
-            },
-            Err(error) => {
-                warn!("SetHookByExactVndbTitleResponse Error: '{}'. Re-try", error);
-                let cmd = command::SetHookByExactVndbTitle {title, version, code};
-                ctx.notify_later(SetHookByExactVndbTitleResponse::new(target, from, is_pm, cmd), duration::ms(CMD_DELAY_MS));
-            }
+        let set_hook = handler::SetHook::new(title.clone(), version, code);
+        let set_hook = self.handler.send(set_hook).into_actor(self);
+        let set_hook = set_hook.map(move |result, _act, ctx| match result {
+            Ok(hook) => ctx.notify(TextResponse::new(target, from, is_pm, format!("Added hook '{}' for VN: {}", hook.code, title).into())),
+            Err(error) => ctx.notify(TextResponse::new(target, from, is_pm, format!("{}", error).into()))
         }).map_err(|error, _act, _ctx| {
             error!("IRC: error processing SetHook: {}", error)
         });
-        ctx.spawn(get_vn);
-
-        Ok(())
-    }
-}
-
-type SetHookByVndbTitleResponse = GetIrcResponse<command::SetHookByVndbTitle>;
-impl Handler<SetHookByVndbTitleResponse> for Irc {
-    type Result = <SetHookByVndbTitleResponse as Message>::Result;
-
-    fn handle(&mut self, msg: SetHookByVndbTitleResponse, ctx: &mut Self::Context) -> Self::Result {
-        let SetHookByVndbTitleResponse {target, from, is_pm, cmd} = msg;
-        let command::SetHookByVndbTitle {title, version, code} = cmd;
-
-        let search_vn = actors::vndb::Get::vn_by_title(&title);
-        let search_vn = self.vndb.send(search_vn.into()).into_actor(self);
-        let search_vn = search_vn.map(move |result, _act, ctx| match result {
-            Ok(results) => match results {
-                actors::vndb::Response::Results(result) => match result.vn() {
-                    Ok(mut vn) => match vn.items.len() {
-                        0 => ctx.notify(TextResponse::new(target, from, is_pm, command::Text::no_such_vn())),
-                        1 => {
-                            let vn = vn.items.pop().unwrap();
-                            let id = vn.id;
-                            let title = vn.title.unwrap();
-                            let set_new_hook = command::SetNewHook { id, title, version, code};
-                            ctx.notify(SetNewHookResponse::new(target, from, is_pm, set_new_hook))
-                        },
-                        num => ctx.notify(TextResponse::new(target, from, is_pm, command::Text::too_many_vn_hits(num, title)))
-                    }
-                    Err(error) => ctx.notify(TextResponse::new(target, from, is_pm, command::Text::error(error)))
-                },
-                other => {
-                    error!("Unexpected VNDB response on get: {:?}", other);
-                    ctx.notify(TextResponse::new(target, from, is_pm, command::Text::bad_vndb()))
-                }
-            },
-            Err(error) => {
-                warn!("SetHookByVndbTitleResponse Error: '{}'. Re-try", error);
-                let cmd = command::SetHookByVndbTitle {title, version, code};
-                ctx.notify_later(SetHookByVndbTitleResponse::new(target, from, is_pm, cmd), duration::ms(CMD_DELAY_MS));
-            }
-        }).map_err(|error, _act, _ctx| {
-            error!("IRC: error processing SetHook: {}", error)
-        });
-        ctx.spawn(search_vn);
-
-        Ok(())
-    }
-}
-
-type SetHookByTitleResponse = GetIrcResponse<command::SetHookByTitle>;
-impl Handler<SetHookByTitleResponse> for Irc {
-    type Result = <SetHookByTitleResponse as Message>::Result;
-
-    fn handle(&mut self, msg: SetHookByTitleResponse, ctx: &mut Self::Context) -> Self::Result {
-        let SetHookByTitleResponse {target, from, is_pm, cmd} = msg;
-        let command::SetHookByTitle {title, version, code} = cmd;
-
-        let search_vn = actors::db::SearchVn(title.clone());
-        let search_vn = self.db.send(search_vn).into_actor(self);
-        let search_vn = search_vn.map(move |result, _act, ctx| match result {
-            Ok(mut vns) => match vns.len() {
-                0 => ctx.notify(SetHookByExactVndbTitleResponse::new(target, from, is_pm, command::SetHookByExactVndbTitle { title, version, code })),
-                1 => {
-                    let vn = vns.pop().unwrap();
-                    let set_vn = command::SetVnHook { vn, version, code};
-                    ctx.notify(SetHookForVnResponse::new(target, from, is_pm, set_vn))
-                },
-                num => ctx.notify(TextResponse::new(target, from, is_pm, command::Text::better_vn_query(num, &title))),
-            },
-            Err(error) => {
-                warn!("SetHookByTitleResponse Error: '{}'. Re-try", error);
-                let cmd = command::SetHookByTitle {title, version, code};
-                ctx.notify_later(SetHookByTitleResponse::new(target, from, is_pm, cmd), duration::ms(CMD_DELAY_MS));
-            }
-        }).map_err(|error, _act, _ctx| {
-            error!("IRC: error processing SetHook: {}", error)
-        });
-        ctx.spawn(search_vn);
-
-        Ok(())
-    }
-}
-
-type SetHookForVnResponse = GetIrcResponse<command::SetVnHook>;
-impl Handler<SetHookForVnResponse> for Irc {
-    type Result = <SetHookForVnResponse as Message>::Result;
-
-    fn handle(&mut self, msg: SetHookForVnResponse, ctx: &mut Self::Context) -> Self::Result {
-        let SetHookForVnResponse {target, from, is_pm, cmd} = msg;
-        let command::SetVnHook {vn, version, code} = cmd;
-        let title = vn.title.clone();
-
-        let put_hook = actors::db::PutHook { vn, version, code };
-        let put_hook = self.db.send(put_hook).into_actor(self);
-        let put_hook = put_hook.map(move |result, _act, ctx| match result {
-            Ok(result) => ctx.notify(TextResponse::new(target, from, is_pm, format!("Added hook '{}' for VN: {}", result.code, title).into())),
-            Err(error) => ctx.notify(TextResponse::new(target, from, is_pm, command::Text::error(error))),
-        }).map_err(|error, _act, _ctx| {
-            error!("IRC: error processing PutHook: {}", error)
-        });
-        ctx.spawn(put_hook);
-
-        Ok(())
-    }
-}
-
-type SetNewHookResponse = GetIrcResponse<command::SetNewHook>;
-impl Handler<SetNewHookResponse> for Irc {
-    type Result = <SetNewHookResponse as Message>::Result;
-
-    fn handle(&mut self, msg: SetNewHookResponse, ctx: &mut Self::Context) -> Self::Result {
-        let SetNewHookResponse {target, from, is_pm, cmd} = msg;
-        let command::SetNewHook {id, title, version, code} = cmd;
-
-        let put_vn = actors::db::PutVn { id, title };
-        let put_vn = self.db.send(put_vn).into_actor(self);
-        let put_vn = put_vn.map(move |result, _act, ctx| match result {
-            Ok(result) => ctx.notify(SetHookForVnResponse::new(target, from, is_pm, command::SetVnHook { vn: result, version, code })),
-            Err(error) => ctx.notify(TextResponse::new(target, from, is_pm, command::Text::error(error))),
-        }).map_err(|error, _act, _ctx| {
-            error!("IRC: error processing PutVn: {}", error)
-        });
-        ctx.spawn(put_vn);
-
-        Ok(())
-    }
-}
-
-type SetHookByNewIdResponse = GetIrcResponse<command::SetHookByNewId>;
-impl Handler<SetHookByNewIdResponse> for Irc {
-    type Result = <SetHookByNewIdResponse as Message>::Result;
-
-    fn handle(&mut self, msg: SetHookByNewIdResponse, ctx: &mut Self::Context) -> Self::Result {
-        let SetHookByNewIdResponse {target, from, is_pm, cmd} = msg;
-        let command::SetHookByNewId {id, version, code} = cmd;
-
-        let get_vn = actors::vndb::Get::vn_by_id(id);
-        let get_vn = self.vndb.send(get_vn.into()).into_actor(self);
-        let get_vn = get_vn.map(move |result, _act, ctx| match result {
-            Ok(results) => match results {
-                actors::vndb::Response::Results(result) => match result.vn() {
-                    Ok(mut vn) => match vn.items.len() {
-                        1 => {
-                            let vn = vn.items.pop().unwrap();
-                            let title = vn.title.unwrap();
-                            ctx.notify(SetNewHookResponse::new(target, from, is_pm, command::SetNewHook { id, title, version, code }))
-                        },
-                        num => {
-                            error!("Unexpected number of VNDB items in request by id '{}'", num);
-                            ctx.notify(TextResponse::new(target, from, is_pm, command::Text::bad_vndb()))
-                        }
-                    },
-                    Err(error) => ctx.notify(TextResponse::new(target, from, is_pm, command::Text::error(error)))
-                },
-                other => {
-                    error!("Unexpected VNDB response on get: {:?}", other);
-                    ctx.notify(TextResponse::new(target, from, is_pm, command::Text::bad_vndb()))
-                }
-            },
-            Err(error) => {
-                warn!("SetHookByNewIdResponse Error: '{}'. Re-try", error);
-                let cmd = command::SetHookByNewId {id, version, code};
-                ctx.notify_later(SetHookByNewIdResponse::new(target, from, is_pm, cmd), duration::ms(CMD_DELAY_MS));
-            }
-        }).map_err(|error, _act, _ctx| {
-            error!("IRC: error processing SetHookByNewId: {}", error)
-        });
-        ctx.spawn(get_vn);
-
-        Ok(())
-    }
-}
-
-type SetHookByIdResponse = GetIrcResponse<command::SetHookById>;
-impl Handler<SetHookByIdResponse> for Irc {
-    type Result = <SetHookByIdResponse as Message>::Result;
-
-    fn handle(&mut self, msg: SetHookByIdResponse, ctx: &mut Self::Context) -> Self::Result {
-        let SetHookByIdResponse {target, from, is_pm, cmd} = msg;
-        let command::SetHookById {id, version, code} = cmd;
-
-        let get_vn = actors::db::GetVnData(id);
-        let get_vn = self.db.send(get_vn).into_actor(self);
-        let get_vn = get_vn.map(move |result, _act, ctx| match result {
-            Ok(Some(result)) => ctx.notify(SetHookForVnResponse::new(target, from, is_pm, command::SetVnHook { vn: result.data, version, code})),
-            Ok(None) => ctx.notify(SetHookByNewIdResponse::new(target, from, is_pm, command::SetHookByNewId { id, version, code })),
-            Err(error) => {
-                error!("DB error: {}", error);
-                ctx.notify(TextResponse::new(target, from, is_pm, command::Text::error(error)))
-            },
-        }).map_err(|error, _act, _ctx| {
-            error!("IRC: error processing SetHookById: {}", error)
-        });
-        ctx.spawn(get_vn);
+        ctx.spawn(set_hook);
 
         Ok(())
     }
 }
 
 //.hook
-type GetHookByExactVndbTitleResponse = GetIrcResponse<command::GetHookByExactVndbTitle>;
-impl Handler<GetHookByExactVndbTitleResponse> for Irc {
-    type Result = <GetHookByExactVndbTitleResponse as Message>::Result;
+type GetHookResponse = GetIrcResponse<command::GetHook>;
+impl Handler<GetHookResponse> for Irc {
+    type Result = <GetHookResponse as Message>::Result;
 
-    fn handle(&mut self, msg: GetHookByExactVndbTitleResponse, ctx: &mut Self::Context) -> Self::Result {
-        let GetHookByExactVndbTitleResponse {target, from, is_pm, cmd} = msg;
+    fn handle(&mut self, msg: GetHookResponse, ctx: &mut Self::Context) -> Self::Result {
+        let GetHookResponse {target, from, is_pm, cmd} = msg;
         let title = cmd.title;
 
-        let get_vn = actors::vndb::Get::vn_by_exact_title(&title);
-        let get_vn = self.vndb.send(get_vn.into()).into_actor(self);
-        let get_vn = get_vn.map(move |result, _act, ctx| match result {
-            Ok(results) => match results {
-                actors::vndb::Response::Results(result) => match result.vn() {
-                    Ok(vn) => match vn.items.len() {
-                        1 => {
-                            let vn = unsafe { vn.items.get_unchecked(0) };
-                            let id = vn.id;
-                            ctx.notify(GetHookByIdResponse::new(target, from, is_pm, command::GetHookById { id }))
-                        },
-                        _ => ctx.notify(GetHookByVndbTitleResponse::new(target, from, is_pm, command::GetHookByVndbTitle { title })),
-                    }
-                    Err(error) => ctx.notify(TextResponse::new(target, from, is_pm, command::Text::error(error)))
-                },
-                other => {
-                    error!("Unexpected VNDB response on get: {:?}", other);
-                    ctx.notify(TextResponse::new(target, from, is_pm, command::Text::bad_vndb()))
-                }
-            },
-            Err(error) => {
-                warn!("GetHookByExactVndbTitleResponse Error: '{}'. Re-try", error);
-                let cmd = command::GetHookByExactVndbTitle {title};
-                ctx.notify_later(GetHookByExactVndbTitleResponse::new(target, from, is_pm, cmd), duration::ms(CMD_DELAY_MS));
-            }
+        let get_hook = handler::GetHook(title);
+        let get_hook = self.handler.send(get_hook).into_actor(self);
+        let get_hook = get_hook.map(move |result, _act, ctx| match result {
+            Ok(data) => ctx.notify(TextResponse::new(target, from, is_pm, format!("{}", data).into())),
+            Err(error) => ctx.notify(TextResponse::new(target, from, is_pm, format!("{}", error).into()))
         }).map_err(|error, _act, _ctx| {
             error!("IRC: error processing GetHook: {}", error)
         });
-        ctx.spawn(get_vn);
-
-        Ok(())
-    }
-}
-
-type GetHookByVndbTitleResponse = GetIrcResponse<command::GetHookByVndbTitle>;
-impl Handler<GetHookByVndbTitleResponse> for Irc {
-    type Result = <GetHookByVndbTitleResponse as Message>::Result;
-
-    fn handle(&mut self, msg: GetHookByVndbTitleResponse, ctx: &mut Self::Context) -> Self::Result {
-        let GetHookByVndbTitleResponse {target, from, is_pm, cmd} = msg;
-        let title = cmd.title;
-
-        let search_vn = actors::vndb::Get::vn_by_title(&title);
-        let search_vn = self.vndb.send(search_vn.into()).into_actor(self);
-        let search_vn = search_vn.map(move |result, _act, ctx| match result {
-            Ok(results) => match results {
-                actors::vndb::Response::Results(result) => match result.vn() {
-                    Ok(vn) => match vn.items.len() {
-                        0 => ctx.notify(TextResponse::new(target, from, is_pm, command::Text::no_such_vn())),
-                        1 => {
-                            let vn = unsafe { vn.items.get_unchecked(0) };
-                            let id = vn.id;
-                            ctx.notify(GetHookByIdResponse::new(target, from, is_pm, command::GetHookById { id }))
-                        },
-                        num => ctx.notify(TextResponse::new(target, from, is_pm, command::Text::too_many_vn_hits(num, title)))
-                    }
-                    Err(error) => ctx.notify(TextResponse::new(target, from, is_pm, command::Text::error(error)))
-                },
-                other => {
-                    error!("Unexpected VNDB response on get: {:?}", other);
-                    ctx.notify(TextResponse::new(target, from, is_pm, command::Text::bad_vndb()))
-                }
-            },
-            Err(error) => {
-                warn!("GetHookByVndbTitleResponse Error: '{}'. Re-try", error);
-                let cmd = command::GetHookByVndbTitle {title};
-                ctx.notify_later(GetHookByVndbTitleResponse::new(target, from, is_pm, cmd), duration::ms(CMD_DELAY_MS));
-            }
-        }).map_err(|error, _act, _ctx| {
-            error!("IRC: error processing GetHook: {}", error)
-        });
-        ctx.spawn(search_vn);
-
-        Ok(())
-    }
-}
-
-type GetHookByTitleResponse = GetIrcResponse<command::GetHookByTitle>;
-impl Handler<GetHookByTitleResponse> for Irc {
-    type Result = <GetHookByTitleResponse as Message>::Result;
-
-    fn handle(&mut self, msg: GetHookByTitleResponse, ctx: &mut Self::Context) -> Self::Result {
-        let GetHookByTitleResponse {target, from, is_pm, cmd} = msg;
-        let title = cmd.title;
-
-        let search_vn = actors::db::SearchVn(title.clone());
-        let search_vn = self.db.send(search_vn).into_actor(self);
-        let search_vn = search_vn.map(move |result, _act, ctx| match result {
-            Ok(vns) => match vns.len() {
-                0 => ctx.notify(GetHookByExactVndbTitleResponse::new(target, from, is_pm, command::GetHookByExactVndbTitle { title })),
-                1 => {
-                    let vn = unsafe { vns.get_unchecked(0) };
-                    ctx.notify(GetHookByIdResponse::new(target, from, is_pm, command::GetHookById { id: vn.id as u64 }))
-                },
-                num => ctx.notify(TextResponse::new(target, from, is_pm, command::Text::better_vn_query(num, &title))),
-            },
-            Err(error) => ctx.notify(TextResponse::new(target, from, is_pm, command::Text::error(error))),
-        }).map_err(|error, _act, _ctx| {
-            error!("IRC: error processing GetHook: {}", error)
-        });
-        ctx.spawn(search_vn);
-
-        Ok(())
-    }
-}
-
-type GetHookForVnResponse = GetIrcResponse<actors::db::models::Vn>;
-impl Handler<GetHookForVnResponse> for Irc {
-    type Result = <GetHookForVnResponse as Message>::Result;
-
-    fn handle(&mut self, msg: GetHookForVnResponse, ctx: &mut Self::Context) -> Self::Result {
-        let GetHookForVnResponse {target, from, is_pm, cmd} = msg;
-
-        let get_vn = actors::db::GetHooks(cmd);
-        let get_vn = self.db.send(get_vn).into_actor(self);
-        let get_vn = get_vn.map(move |result, _act, ctx| match result {
-            Ok(result) => ctx.notify(TextResponse::new(target, from, is_pm, command::Text::from_vn_data(result))),
-            Err(error) => ctx.notify(TextResponse::new(target, from, is_pm, command::Text::error(error))),
-        }).map_err(|error, _act, _ctx| {
-            error!("IRC: error processing GetHookById: {}", error)
-        });
-        ctx.spawn(get_vn);
-
-        Ok(())
-    }
-}
-
-type GetHookByIdResponse = GetIrcResponse<command::GetHookById>;
-impl Handler<GetHookByIdResponse> for Irc {
-    type Result = <GetHookByIdResponse as Message>::Result;
-
-    fn handle(&mut self, msg: GetHookByIdResponse, ctx: &mut Self::Context) -> Self::Result {
-        let GetHookByIdResponse {target, from, is_pm, cmd} = msg;
-        let id = cmd.id;
-
-        let get_vn = actors::db::GetVnData(id);
-        let get_vn = self.db.send(get_vn).into_actor(self);
-        let get_vn = get_vn.map(move |result, _act, ctx| match result {
-            Ok(Some(result)) => ctx.notify(TextResponse::new(target, from, is_pm, command::Text::from_vn_data(result))),
-            Ok(None) => ctx.notify(TextResponse::new(target, from, is_pm, "No hook exists for VN".into())),
-            Err(error) => {
-                error!("DB error: {}", error);
-                ctx.notify(TextResponse::new(target, from, is_pm, command::Text::error(error)))
-            },
-        }).map_err(|error, _act, _ctx| {
-            error!("IRC: error processing GetHookById: {}", error)
-        });
-        ctx.spawn(get_vn);
+        ctx.spawn(get_hook);
 
         Ok(())
     }
 }
 
 //.del_hook
-type DelHookByExactVndbTitleResponse = GetIrcResponse<command::DelHookByExactVndbTitle>;
-impl Handler<DelHookByExactVndbTitleResponse> for Irc {
-    type Result = <DelHookByExactVndbTitleResponse as Message>::Result;
+type DelHookResponse = GetIrcResponse<command::DelHook>;
+impl Handler<DelHookResponse> for Irc {
+    type Result = <DelHookResponse as Message>::Result;
 
-    fn handle(&mut self, msg: DelHookByExactVndbTitleResponse, ctx: &mut Self::Context) -> Self::Result {
-        let DelHookByExactVndbTitleResponse {target, from, is_pm, cmd} = msg;
-        let command::DelHookByExactVndbTitle {title, version} = cmd;
+    fn handle(&mut self, msg: DelHookResponse, ctx: &mut Self::Context) -> Self::Result {
+        let DelHookResponse {target, from, is_pm, cmd} = msg;
+        let command::DelHook {title, version} = cmd;
 
-        let get_vn = actors::vndb::Get::vn_by_exact_title(&title);
-        let get_vn = self.vndb.send(get_vn.into()).into_actor(self);
-        let get_vn = get_vn.map(move |result, _act, ctx| match result {
-            Ok(results) => match results {
-                actors::vndb::Response::Results(result) => match result.vn() {
-                    Ok(vn) => match vn.items.len() {
-                        1 => {
-                            let vn = unsafe { vn.items.get_unchecked(0) };
-                            let id = vn.id;
-                            ctx.notify(DelHookByIdResponse::new(target, from, is_pm, command::DelHookById { id, version }))
-                        },
-                        _ => ctx.notify(DelHookByVndbTitleResponse::new(target, from, is_pm, command::DelHookByVndbTitle { title, version })),
-                    },
-                    Err(error) => ctx.notify(TextResponse::new(target, from, is_pm, command::Text::error(error)))
-                },
-                other => {
-                    error!("Unexpected VNDB response on get: {:?}", other);
-                    ctx.notify(TextResponse::new(target, from, is_pm, command::Text::bad_vndb()))
-                }
-            },
-            Err(error) => {
-                warn!("DelHookByExactVndbTitleResponse Error: '{}'. Re-try", error);
-                let cmd = command::DelHookByExactVndbTitle {title, version};
-                ctx.notify_later(DelHookByExactVndbTitleResponse::new(target, from, is_pm, cmd), duration::ms(CMD_DELAY_MS));
-            }
-        }).map_err(|error, _act, _ctx| {
-            error!("IRC: error processing DelHook: {}", error)
-        });
-        ctx.spawn(get_vn);
-
-        Ok(())
-    }
-}
-
-type DelHookByVndbTitleResponse = GetIrcResponse<command::DelHookByVndbTitle>;
-impl Handler<DelHookByVndbTitleResponse> for Irc {
-    type Result = <DelHookByVndbTitleResponse as Message>::Result;
-
-    fn handle(&mut self, msg: DelHookByVndbTitleResponse, ctx: &mut Self::Context) -> Self::Result {
-        let DelHookByVndbTitleResponse {target, from, is_pm, cmd} = msg;
-        let command::DelHookByVndbTitle {title, version} = cmd;
-
-        let search_vn = actors::vndb::Get::vn_by_title(&title);
-        let search_vn = self.vndb.send(search_vn.into()).into_actor(self);
-        let search_vn = search_vn.map(move |result, _act, ctx| match result {
-            Ok(results) => match results {
-                actors::vndb::Response::Results(result) => match result.vn() {
-                    Ok(vn) => match vn.items.len() {
-                        0 => ctx.notify(TextResponse::new(target, from, is_pm, command::Text::no_such_vn())),
-                        1 => {
-                            let vn = unsafe { vn.items.get_unchecked(0) };
-                            let id = vn.id;
-                            ctx.notify(DelHookByIdResponse::new(target, from, is_pm, command::DelHookById { id, version }))
-                        },
-                        num => ctx.notify(TextResponse::new(target, from, is_pm, command::Text::too_many_vn_hits(num, title)))
-                    }
-                    Err(error) => ctx.notify(TextResponse::new(target, from, is_pm, command::Text::error(error)))
-                },
-                other => {
-                    error!("Unexpected VNDB response on get: {:?}", other);
-                    ctx.notify(TextResponse::new(target, from, is_pm, command::Text::bad_vndb()))
-                }
-            },
-            Err(error) => {
-                warn!("DelHookByVndbTitleResponse Error: '{}'. Re-try", error);
-                let cmd = command::DelHookByVndbTitle {title, version};
-                ctx.notify_later(DelHookByVndbTitleResponse::new(target, from, is_pm, cmd), duration::ms(CMD_DELAY_MS));
-            }
-        }).map_err(|error, _act, _ctx| {
-            error!("IRC: error processing DelHook: {}", error)
-        });
-        ctx.spawn(search_vn);
-
-        Ok(())
-    }
-}
-
-type DelHookByTitleResponse = GetIrcResponse<command::DelHookByTitle>;
-impl Handler<DelHookByTitleResponse> for Irc {
-    type Result = <DelHookByTitleResponse as Message>::Result;
-
-    fn handle(&mut self, msg: DelHookByTitleResponse, ctx: &mut Self::Context) -> Self::Result {
-        let DelHookByTitleResponse {target, from, is_pm, cmd} = msg;
-        let command::DelHookByTitle {title, version} = cmd;
-
-        let search_vn = actors::db::SearchVn(title.clone());
-        let search_vn = self.db.send(search_vn).into_actor(self);
-        let search_vn = search_vn.map(move |result, _act, ctx| match result {
-            Ok(vns) => match vns.len() {
-                0 => ctx.notify(DelHookByExactVndbTitleResponse::new(target, from, is_pm, command::DelHookByExactVndbTitle { title, version })),
-                1 => {
-                    let vn = unsafe { vns.get_unchecked(0) };
-                    ctx.notify(DelHookByIdResponse::new(target, from, is_pm, command::DelHookById { id: vn.id as u64, version }))
-                },
-                num => ctx.notify(TextResponse::new(target, from, is_pm, command::Text::better_vn_query(num, &title))),
-            },
-            Err(error) => ctx.notify(TextResponse::new(target, from, is_pm, command::Text::error(error))),
-        }).map_err(|error, _act, _ctx| {
-            error!("IRC: error processing DelHook: {}", error)
-        });
-        ctx.spawn(search_vn);
-
-        Ok(())
-    }
-}
-
-type DelHookByIdResponse = GetIrcResponse<command::DelHookById>;
-impl Handler<DelHookByIdResponse> for Irc {
-    type Result = <DelHookByIdResponse as Message>::Result;
-
-    fn handle(&mut self, msg: DelHookByIdResponse, ctx: &mut Self::Context) -> Self::Result {
-        let DelHookByIdResponse {target, from, is_pm, cmd} = msg;
-        let command::DelHookById {id, version} = cmd;
-
-        let get_vn = actors::db::GetVn(id);
-        let get_vn = self.db.send(get_vn).into_actor(self);
-        let get_vn = get_vn.map(move |result, _act, ctx| match result {
-            Ok(Some(vn)) => ctx.notify(DelVnHookResponse::new(target, from, is_pm, command::DelVnHook { vn, version })),
-            Ok(None) => ctx.notify(TextResponse::new(target, from, is_pm, format!("No hook already for v{}", id).into())),
-            Err(error) => {
-                error!("DB error: {}", error);
-                ctx.notify(TextResponse::new(target, from, is_pm, command::Text::error(error)))
-            },
-        }).map_err(|error, _act, _ctx| {
-            error!("IRC: error processing DelHookById: {}", error)
-        });
-        ctx.spawn(get_vn);
-
-        Ok(())
-    }
-}
-
-type DelVnHookResponse = GetIrcResponse<command::DelVnHook>;
-impl Handler<DelVnHookResponse> for Irc {
-    type Result = <DelVnHookResponse as Message>::Result;
-
-    fn handle(&mut self, msg: DelVnHookResponse, ctx: &mut Self::Context) -> Self::Result {
-        let DelVnHookResponse {target, from, is_pm, cmd} = msg;
-        let command::DelVnHook {vn, version} = cmd;
-        let id = vn.id;
-
-        info!("Attempt to remove hook '{}' for VN {}", &version, &vn.title);
-        let del_hook = actors::db::DelHook { vn, version };
-        let del_hook = self.db.send(del_hook).into_actor(self);
+        let del_hook = handler::DelHook::new(title.clone(), version);
+        let del_hook = self.handler.send(del_hook).into_actor(self);
         let del_hook = del_hook.map(move |result, _act, ctx| match result {
-            Ok(0) => ctx.notify(TextResponse::new(target, from, is_pm, format!("v{}: No such hook to remove", id).into())),
-            Ok(_) => ctx.notify(TextResponse::new(target, from, is_pm, format!("v{}: Removed hook", id).into())),
-            Err(error) => {
-                error!("DB error: {}", error);
-                ctx.notify(TextResponse::new(target, from, is_pm, command::Text::error(error)))
-            }
+            Ok(0) => ctx.notify(TextResponse::new(target, from, is_pm, format!("{}: No hook to remove.", title).into())),
+            Ok(_) => ctx.notify(TextResponse::new(target, from, is_pm, format!("{}: Removed hook.", title).into())),
+            Err(error) => ctx.notify(TextResponse::new(target, from, is_pm, format!("{}", error).into()))
         }).map_err(|error, _act, _ctx| {
-            error!("IRC: error processing DelVnHook: {}", error)
+            error!("IRC: error processing DelHook: {}", error)
         });
         ctx.spawn(del_hook);
 
@@ -831,141 +295,22 @@ impl Handler<DelVnHookResponse> for Irc {
 }
 
 //.del_vn
-type DelVnByExactVndbTitleResponse = GetIrcResponse<command::DelVnByExactVndbTitle>;
-impl Handler<DelVnByExactVndbTitleResponse> for Irc {
-    type Result = <DelVnByExactVndbTitleResponse as Message>::Result;
+type DelVnResponse = GetIrcResponse<command::DelVn>;
+impl Handler<DelVnResponse> for Irc {
+    type Result = <DelVnResponse as Message>::Result;
 
-    fn handle(&mut self, msg: DelVnByExactVndbTitleResponse, ctx: &mut Self::Context) -> Self::Result {
-        let DelVnByExactVndbTitleResponse {target, from, is_pm, cmd} = msg;
+    fn handle(&mut self, msg: DelVnResponse, ctx: &mut Self::Context) -> Self::Result {
+        let DelVnResponse {target, from, is_pm, cmd} = msg;
         let title = cmd.title;
 
-        let get_vn = actors::vndb::Get::vn_by_exact_title(&title);
-        let get_vn = self.vndb.send(get_vn.into()).into_actor(self);
-        let get_vn = get_vn.map(move |result, _act, ctx| match result {
-            Ok(results) => match results {
-                actors::vndb::Response::Results(result) => match result.vn() {
-                    Ok(vn) => match vn.items.len() {
-                        1 => {
-                            let vn = unsafe { vn.items.get_unchecked(0) };
-                            let id = vn.id;
-                            ctx.notify(DelVnByIdResponse::new(target, from, is_pm, command::DelVnById { id }))
-                        },
-                        _ => ctx.notify(DelVnByVndbTitleResponse::new(target, from, is_pm, command::DelVnByVndbTitle { title })),
-                    }
-                    Err(error) => ctx.notify(TextResponse::new(target, from, is_pm, command::Text::error(error)))
-                },
-                other => {
-                    error!("Unexpected VNDB response on get: {:?}", other);
-                    ctx.notify(TextResponse::new(target, from, is_pm, command::Text::bad_vndb()))
-                }
-            },
-            Err(error) => {
-                warn!("DelVnByExactVndbTitleResponse Error: '{}'. Re-try", error);
-                let cmd = command::DelVnByExactVndbTitle {title};
-                ctx.notify_later(DelVnByExactVndbTitleResponse::new(target, from, is_pm, cmd), duration::ms(CMD_DELAY_MS));
-            }
-        }).map_err(|error, _act, _ctx| {
-            error!("IRC: error processing DelVn: {}", error)
-        });
-        ctx.spawn(get_vn);
-
-        Ok(())
-    }
-}
-
-type DelVnByVndbTitleResponse = GetIrcResponse<command::DelVnByVndbTitle>;
-impl Handler<DelVnByVndbTitleResponse> for Irc {
-    type Result = <DelVnByVndbTitleResponse as Message>::Result;
-
-    fn handle(&mut self, msg: DelVnByVndbTitleResponse, ctx: &mut Self::Context) -> Self::Result {
-        let DelVnByVndbTitleResponse {target, from, is_pm, cmd} = msg;
-        let title = cmd.title;
-
-        let search_vn = actors::vndb::Get::vn_by_title(&title);
-        let search_vn = self.vndb.send(search_vn.into()).into_actor(self);
-        let search_vn = search_vn.map(move |result, _act, ctx| match result {
-            Ok(results) => match results {
-                actors::vndb::Response::Results(result) => match result.vn() {
-                    Ok(vn) => match vn.items.len() {
-                        0 => ctx.notify(TextResponse::new(target, from, is_pm, command::Text::no_such_vn())),
-                        1 => {
-                            let vn = unsafe { vn.items.get_unchecked(0) };
-                            let id = vn.id;
-                            ctx.notify(DelVnByIdResponse::new(target, from, is_pm, command::DelVnById { id }))
-                        },
-                        num => ctx.notify(TextResponse::new(target, from, is_pm, command::Text::too_many_vn_hits(num, title)))
-                    }
-                    Err(error) => ctx.notify(TextResponse::new(target, from, is_pm, command::Text::error(error)))
-                },
-                other => {
-                    error!("Unexpected VNDB response on get: {:?}", other);
-                    ctx.notify(TextResponse::new(target, from, is_pm, command::Text::bad_vndb()))
-                }
-            },
-            Err(error) => {
-                warn!("DelVnByVndbTitleResponse Error: '{}'. Re-try", error);
-                let cmd = command::DelVnByVndbTitle {title};
-                ctx.notify_later(DelVnByVndbTitleResponse::new(target, from, is_pm, cmd), duration::ms(CMD_DELAY_MS));
-            }
-        }).map_err(|error, _act, _ctx| {
-            error!("IRC: error processing DelVn: {}", error)
-        });
-        ctx.spawn(search_vn);
-
-        Ok(())
-    }
-}
-
-type DelVnByTitleResponse = GetIrcResponse<command::DelVnByTitle>;
-impl Handler<DelVnByTitleResponse> for Irc {
-    type Result = <DelVnByTitleResponse as Message>::Result;
-
-    fn handle(&mut self, msg: DelVnByTitleResponse, ctx: &mut Self::Context) -> Self::Result {
-        let DelVnByTitleResponse {target, from, is_pm, cmd} = msg;
-        let title = cmd.title;
-
-        let search_vn = actors::db::SearchVn(title.clone());
-        let search_vn = self.db.send(search_vn).into_actor(self);
-        let search_vn = search_vn.map(move |result, _act, ctx| match result {
-            Ok(vns) => match vns.len() {
-                0 => ctx.notify(DelVnByExactVndbTitleResponse::new(target, from, is_pm, command::DelVnByExactVndbTitle { title })),
-                1 => {
-                    let vn = unsafe { vns.get_unchecked(0) };
-                    ctx.notify(DelVnByIdResponse::new(target, from, is_pm, command::DelVnById { id: vn.id as u64 }))
-                },
-                num => ctx.notify(TextResponse::new(target, from, is_pm, command::Text::better_vn_query(num, &title))),
-            },
-            Err(error) => ctx.notify(TextResponse::new(target, from, is_pm, command::Text::error(error))),
-        }).map_err(|error, _act, _ctx| {
-            error!("IRC: error processing DelVn: {}", error)
-        });
-        ctx.spawn(search_vn);
-
-        Ok(())
-    }
-}
-
-type DelVnByIdResponse = GetIrcResponse<command::DelVnById>;
-impl Handler<DelVnByIdResponse> for Irc {
-    type Result = <DelVnByIdResponse as Message>::Result;
-
-    fn handle(&mut self, msg: DelVnByIdResponse, ctx: &mut Self::Context) -> Self::Result {
-        let DelVnByIdResponse {target, from, is_pm, cmd} = msg;
-        let id = cmd.id;
-
-        let del_vn = actors::db::DelVnData(id);
-        let del_vn = self.db.send(del_vn).into_actor(self);
+        let del_vn = handler::DelVn(title.clone());
+        let del_vn = self.handler.send(del_vn).into_actor(self);
         let del_vn = del_vn.map(move |result, _act, ctx| match result {
-            Ok(_) => {
-                let text = format!("Removed v{} from DB", id);
-                ctx.notify(TextResponse::new(target, from, is_pm, text.into()));
-            },
-            Err(error) => {
-                error!("DB error: {}", error);
-                ctx.notify(TextResponse::new(target, from, is_pm, command::Text::error(error)))
-            },
+            Ok(0) => ctx.notify(TextResponse::new(target, from, is_pm, format!("{}: No such VN exists in DB.", title).into())),
+            Ok(_) => ctx.notify(TextResponse::new(target, from, is_pm, format!("{}: removed from DB.", title).into())),
+            Err(error) => ctx.notify(TextResponse::new(target, from, is_pm, format!("{}", error).into()))
         }).map_err(|error, _act, _ctx| {
-            error!("IRC: error processing DelVnById: {}", error)
+            error!("IRC: error processing DelVn: {}", error)
         });
         ctx.spawn(del_vn);
 
@@ -982,34 +327,23 @@ impl Handler<GetRefResponse> for Irc {
         let GetRefResponse {target, from, is_pm, cmd} = msg;
         let command::Ref {kind, id, url} = cmd;
 
-        let get_ref = actors::vndb::Get::get_by_id(kind.clone(), id);
-        let get_ref = self.vndb.send(get_ref.into()).into_actor(self);
+        let get_ref = handler::GetVndbObject::new(id, kind.clone());
+        let get_ref = self.handler.send(get_ref).into_actor(self);
         let get_ref = get_ref.map(move |result, _act, ctx| match result {
-            Ok(results) => match results {
-                actors::vndb::Response::Results(result) => {
-                    let items = try_option!(result.get("items"), "VNDB results is missing items field!");
-                    let item = try_option!(items.get(0), "VNDB results's items is empty field!");
-                    let name = try_option!(item.get("title").or(item.get("name")).or(item.get("username")),
-                                                "VNDB results's item is missing title/name field!");
-
-                    let kind = kind.short();
-                    let id = item.get("id").unwrap();
-                    let text = match url {
-                        true => format!("{0}{1}: {2} - https://vndb.org/{0}{1}", kind, id, name),
-                        false => format!("{0}{1}: {2}", kind, id, name),
-                    };
-                    ctx.notify(TextResponse::new(target, from, is_pm, text.into()))
-                },
-                other => {
-                    error!("Unexpected VNDB response on get: {:?}", other);
-                    ctx.notify(TextResponse::new(target, from, is_pm, command::Text::bad_vndb()))
-                }
+            Ok(result) => {
+                let items = try_option!(result.get("items"), "VNDB results is missing items field!");
+                let item = try_option!(items.get(0), "VNDB results's items is empty field!");
+                let name = try_option!(item.get("title").or(item.get("name")).or(item.get("username")),
+                                       "VNDB results's item is missing title/name field!");
+                let kind = kind.short();
+                let id = item.get("id").unwrap();
+                let text = match url {
+                    true => format!("{0}{1}: {2} - https://vndb.org/{0}{1}", kind, id, name),
+                    false => format!("{0}{1}: {2}", kind, id, name),
+                };
+                ctx.notify(TextResponse::new(target, from, is_pm, text.into()))
             },
-            Err(error) => {
-                warn!("GetRefResponse Error: '{}'. Re-try", error);
-                let cmd = command::Ref {id, kind, url};
-                ctx.notify_later(GetRefResponse::new(target, from, is_pm, cmd), duration::ms(CMD_DELAY_MS));
-            }
+            Err(error) => warn!("GetRef failed: {}", error)
         }).map_err(|error, _act, _ctx| {
             error!("IRC: error processing GetRef: {}", error)
         });

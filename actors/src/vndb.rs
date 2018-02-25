@@ -155,7 +155,7 @@ impl StreamHandler<protocol::message::Response, io::Error> for Vndb {
 }
 
 pub use self::protocol::message::request::get::{Type, Flags, Filters, Options};
-pub use self::protocol::message::Response;
+pub use self::protocol::message::{Response, response};
 
 //We cannot implement 3pp trait on 3pp struct... :(
 #[derive(Clone)]
