@@ -25,7 +25,6 @@ use ::collections::HashSet;
 
 use ::config::Config;
 use ::command;
-use ::handler;
 
 macro_rules! try_option {
     ($result:expr, $warn:expr) => { match $result {
@@ -39,13 +38,13 @@ macro_rules! try_option {
 
 pub struct Irc {
     config: Config,
-    handler: Addr<actix::Syn, handler::Executor>,
+    handler: Addr<actix::Syn, actors::exec::Executor>,
     client: Option<IrcClient>,
     ignores: HashSet<String>
 }
 
 impl Irc {
-    pub fn new(config: Config, handler: Addr<Syn, handler::Executor>) -> Self {
+    pub fn new(config: Config, handler: Addr<Syn, actors::exec::Executor>) -> Self {
         let mut ignores = HashSet::new();
         ignores.insert("Fltrsh".to_string());
 
@@ -207,7 +206,7 @@ impl Handler<GetVnResponse> for Irc {
         let GetVnResponse {target, from, is_pm, cmd} = msg;
         let title = cmd.title;
 
-        let get_vn = handler::FindVn::new(title);
+        let get_vn = actors::exec::FindVn::new(title);
         let get_vn = self.handler.send(get_vn).into_actor(self);
         let get_vn = get_vn.map(move |result, _act, ctx| match result {
             Ok(vn) => {
@@ -233,7 +232,7 @@ impl Handler<SetHookResponse> for Irc {
         let SetHookResponse {target, from, is_pm, cmd} = msg;
         let command::SetHook {title, version, code} = cmd;
 
-        let set_hook = handler::SetHook::new(title.clone(), version, code);
+        let set_hook = actors::exec::SetHook::new(title.clone(), version, code);
         let set_hook = self.handler.send(set_hook).into_actor(self);
         let set_hook = set_hook.map(move |result, _act, ctx| match result {
             Ok(hook) => ctx.notify(TextResponse::new(target, from, is_pm, format!("Added hook '{}' for VN: {}", hook.code, title).into())),
@@ -256,7 +255,7 @@ impl Handler<GetHookResponse> for Irc {
         let GetHookResponse {target, from, is_pm, cmd} = msg;
         let title = cmd.title;
 
-        let get_hook = handler::GetHook(title);
+        let get_hook = actors::exec::GetHook(title);
         let get_hook = self.handler.send(get_hook).into_actor(self);
         let get_hook = get_hook.map(move |result, _act, ctx| match result {
             Ok(data) => ctx.notify(TextResponse::new(target, from, is_pm, format!("{}", data).into())),
@@ -279,7 +278,7 @@ impl Handler<DelHookResponse> for Irc {
         let DelHookResponse {target, from, is_pm, cmd} = msg;
         let command::DelHook {title, version} = cmd;
 
-        let del_hook = handler::DelHook::new(title.clone(), version);
+        let del_hook = actors::exec::DelHook::new(title.clone(), version);
         let del_hook = self.handler.send(del_hook).into_actor(self);
         let del_hook = del_hook.map(move |result, _act, ctx| match result {
             Ok(0) => ctx.notify(TextResponse::new(target, from, is_pm, format!("{}: No hook to remove.", title).into())),
@@ -303,7 +302,7 @@ impl Handler<DelVnResponse> for Irc {
         let DelVnResponse {target, from, is_pm, cmd} = msg;
         let title = cmd.title;
 
-        let del_vn = handler::DelVn(title.clone());
+        let del_vn = actors::exec::DelVn(title.clone());
         let del_vn = self.handler.send(del_vn).into_actor(self);
         let del_vn = del_vn.map(move |result, _act, ctx| match result {
             Ok(0) => ctx.notify(TextResponse::new(target, from, is_pm, format!("{}: No such VN exists in DB.", title).into())),
@@ -327,7 +326,7 @@ impl Handler<GetRefResponse> for Irc {
         let GetRefResponse {target, from, is_pm, cmd} = msg;
         let command::Ref {kind, id, url} = cmd;
 
-        let get_ref = handler::GetVndbObject::new(id, kind.clone());
+        let get_ref = actors::exec::GetVndbObject::new(id, kind.clone());
         let get_ref = self.handler.send(get_ref).into_actor(self);
         let get_ref = get_ref.map(move |result, _act, ctx| match result {
             Ok(result) => {

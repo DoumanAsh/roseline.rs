@@ -19,7 +19,7 @@ use self::tokio_io::codec::{FramedRead};
 use self::tokio_io::io::{WriteHalf};
 use self::actix::prelude::*;
 use self::actix::io::{FramedWrite, WriteHandler};
-use self::vndb::protocol;
+pub use self::vndb::protocol;
 
 use ::collections::VecDeque;
 use ::time;

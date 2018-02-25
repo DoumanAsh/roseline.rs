@@ -1,14 +1,14 @@
 extern crate actix;
 extern crate futures;
 
-extern crate vndb;
-extern crate actors;
-
-use self::vndb::protocol::message::request::get::Type as VndbRequestType;
-use self::futures::{future, Future};
-use self::actix::prelude::*;
+use ::vndb;
+use ::db;
 
 use ::mem;
+
+use vndb::protocol::message::request::get::Type as VndbRequestType;
+use self::futures::{future, Future};
+use self::actix::prelude::*;
 
 fn parse_vndb_ref(text: &str) -> Option<(VndbRequestType, u64)> {
     let mut text = text.chars();
@@ -36,12 +36,23 @@ fn parse_vndb_ref(text: &str) -> Option<(VndbRequestType, u64)> {
 ///Performs execution of various commands
 ///that involves VNDB or DB
 pub struct Executor {
-    vndb: Addr<Unsync, actors::vndb::Vndb>,
-    db: Addr<Syn, actors::db::Db>,
+    vndb: Addr<Unsync, vndb::Vndb>,
+    db: Addr<Syn, db::Db>,
 }
 
 impl Executor {
-    pub fn new(vndb: Addr<Unsync, actors::vndb::Vndb>, db: Addr<Syn, actors::db::Db>) -> Self {
+    pub fn new(vndb: Addr<Unsync, vndb::Vndb>, db: Addr<Syn, db::Db>) -> Self {
+        Self {
+            vndb,
+            db
+        }
+    }
+
+    ///Starts Executor with default vndb and db actors
+    pub fn default_threads(threads: usize) -> Self {
+        let db: Addr<Syn, _> = db::Db::start_threaded(threads);
+        let vndb: Addr<Unsync, _> = Supervisor::start(|_| vndb::Vndb::new());
+
         Self {
             vndb,
             db
@@ -103,7 +114,7 @@ macro_rules! try_vndb_response {
 
 macro_rules! try_vndb_results {
     ($resp:expr, $return_value:expr) => {{ match $resp {
-        actors::vndb::Response::Results(result) => result,
+        vndb::Response::Results(result) => result,
         other => {
             error!("Unexpected VNDB response on get: {:?}", other);
             return $return_value
@@ -145,16 +156,16 @@ impl GetVn {
     }
 }
 impl Message for GetVn {
-    type Result = Result<actors::vndb::response::results::Vn, ResponseError>;
+    type Result = Result<vndb::response::results::Vn, ResponseError>;
 }
-type GetVnResponseFuture = Box<Future<Item=actors::vndb::response::results::Vn, Error=ResponseError>>;
+type GetVnResponseFuture = Box<Future<Item=vndb::response::results::Vn, Error=ResponseError>>;
 impl Handler<GetVn> for Executor {
     type Result = GetVnResponseFuture;
 
     fn handle(&mut self, msg: GetVn, _ctx: &mut Self::Context) -> Self::Result {
         let GetVn {id} = msg;
 
-        let get_vn = actors::vndb::Get::vn_by_id(id);
+        let get_vn = vndb::Get::vn_by_id(id);
         let get_vn = self.vndb.send(get_vn.into()).map_err(|error| {
             error!("Error processing GetVn: {}", error);
             ResponseError::Internal(format!("{}", error))
@@ -181,16 +192,16 @@ impl GetVnDb {
     }
 }
 impl Message for GetVnDb {
-    type Result = Result<Option<actors::db::models::Vn>, ResponseError>;
+    type Result = Result<Option<db::models::Vn>, ResponseError>;
 }
-type GetVnDbResponseFuture = Box<Future<Item=Option<actors::db::models::Vn>, Error=ResponseError>>;
+type GetVnDbResponseFuture = Box<Future<Item=Option<db::models::Vn>, Error=ResponseError>>;
 impl Handler<GetVnDb> for Executor {
     type Result = GetVnDbResponseFuture;
 
     fn handle(&mut self, msg: GetVnDb, _ctx: &mut Self::Context) -> Self::Result {
         let id = msg.0.id;
 
-        let get_vn = actors::db::GetVn(id);
+        let get_vn = db::GetVn(id);
         let get_vn = self.db.send(get_vn).map_err(|error| {
             error!("Error processing GetVnDb: {}", error);
             ResponseError::Internal(format!("{}", error))
@@ -215,16 +226,16 @@ impl FindVn {
     }
 }
 impl Message for FindVn {
-    type Result = Result<actors::vndb::response::results::Vn, ResponseError>;
+    type Result = Result<vndb::response::results::Vn, ResponseError>;
 }
-type FindVnResponseFuture = Box<Future<Item=actors::vndb::response::results::Vn, Error=ResponseError>>;
+type FindVnResponseFuture = Box<Future<Item=vndb::response::results::Vn, Error=ResponseError>>;
 impl Handler<FindVn> for Executor {
     type Result = FindVnResponseFuture;
 
     fn handle(&mut self, msg: FindVn, _ctx: &mut Self::Context) -> Self::Result {
         let FindVn {title} = msg;
 
-        let get_vn = actors::vndb::Get::vn_by_exact_title(&title);
+        let get_vn = vndb::Get::vn_by_exact_title(&title);
         let vndb = self.vndb.clone();
         let get_vn = self.vndb.send(get_vn.into()).map_err(|error| {
             error!("Error processing FindVn: {}", error);
@@ -237,7 +248,7 @@ impl Handler<FindVn> for Executor {
             match result.items.len() {
                 1 => Box::new(future::ok(result.items.drain(..).next().unwrap())),
                 _ => {
-                    let search_vn = actors::vndb::Get::vn_by_title(&title);
+                    let search_vn = vndb::Get::vn_by_title(&title);
                     let search_vn = vndb.send(search_vn.into()).map_err(|error| {
                         error!("Error processing FindVn: {}", error);
                         ResponseError::Internal(format!("{}", error))
@@ -273,16 +284,16 @@ impl FindVnDb {
     }
 }
 impl Message for FindVnDb {
-    type Result = Result<Option<actors::db::models::Vn>, ResponseError>;
+    type Result = Result<Option<db::models::Vn>, ResponseError>;
 }
-type FindVnDbResponseFuture = Box<Future<Item=Option<actors::db::models::Vn>, Error=ResponseError>>;
+type FindVnDbResponseFuture = Box<Future<Item=Option<db::models::Vn>, Error=ResponseError>>;
 impl Handler<FindVnDb> for Executor {
     type Result = FindVnDbResponseFuture;
 
     fn handle(&mut self, msg: FindVnDb, _ctx: &mut Self::Context) -> Self::Result {
         let title = msg.0.title;
 
-        let search_vn = actors::db::SearchVn(title);
+        let search_vn = db::SearchVn(title);
         let search_vn = self.db.send(search_vn).map_err(|error| {
             error!("Error processing FindVnDb: {}", error);
             ResponseError::Internal(format!("{}", error))
@@ -305,9 +316,9 @@ impl Handler<FindVnDb> for Executor {
 
 pub struct GetHook(pub String);
 impl Message for GetHook {
-    type Result = Result<actors::db::VnData, ResponseError>;
+    type Result = Result<db::VnData, ResponseError>;
 }
-type GetHookResponseFuture = Box<Future<Item=actors::db::VnData, Error=ResponseError>>;
+type GetHookResponseFuture = Box<Future<Item=db::VnData, Error=ResponseError>>;
 impl Handler<GetHook> for Executor {
     type Result = GetHookResponseFuture;
 
@@ -322,7 +333,7 @@ impl Handler<GetHook> for Executor {
                 if kind.short() != "v" {
                     return Box::new(future::err(ResponseError::InvalidVnId(kind, id)));
                 }
-                let get_vn = actors::db::GetVnData(id);
+                let get_vn = db::GetVnData(id);
                 let get_vn = this.db.send(get_vn).map_err(|error| {
                     error!("Error processing GetVnData: {}", error);
                     ResponseError::Internal(format!("{}", error))
@@ -353,7 +364,7 @@ impl Handler<GetHook> for Executor {
                         future::Either::B(get_vn)
                     }
                 }).and_then(|(vn, this)| {
-                    let get_hooks = actors::db::GetHooks(vn);
+                    let get_hooks = db::GetHooks(vn);
                     let get_hooks = this.db.send(get_hooks).map_err(|error| {
                         error!("Error processing GetHooks: {}", error);
                         ResponseError::Internal(format!("{}", error))
@@ -388,9 +399,9 @@ impl SetHook {
     }
 }
 impl Message for SetHook {
-    type Result = Result<actors::db::models::HookView, ResponseError>;
+    type Result = Result<db::models::HookView, ResponseError>;
 }
-type SetHookResponseFuture = Box<Future<Item=actors::db::models::HookView, Error=ResponseError>>;
+type SetHookResponseFuture = Box<Future<Item=db::models::HookView, Error=ResponseError>>;
 impl Handler<SetHook> for Executor {
     type Result = SetHookResponseFuture;
 
@@ -411,7 +422,7 @@ impl Handler<SetHook> for Executor {
                     None => {
                         let get_vn = GetVn::new(id);
                         let get_vn = this.handle(get_vn, ctx).and_then(move |vn| {
-                            let put_vn = actors::db::PutVn { id: vn.id, title: vn.title.unwrap() };
+                            let put_vn = db::PutVn { id: vn.id, title: vn.title.unwrap() };
                             this.db.send(put_vn).map_err(|error| {
                                 error!("Error processing PutVn: {}", error);
                                 ResponseError::Internal(format!("{}", error))
@@ -429,7 +440,7 @@ impl Handler<SetHook> for Executor {
             None => {
                 let get_vn = FindVn::new(title);
                 let get_vn = this.handle(get_vn, ctx).and_then(move |vn| {
-                    let put_vn = actors::db::PutVn { id: vn.id, title: vn.title.unwrap() };
+                    let put_vn = db::PutVn { id: vn.id, title: vn.title.unwrap() };
                     this.db.send(put_vn).map_err(|error| {
                         error!("Error processing PutVn: {}", error);
                         ResponseError::Internal(format!("{}", error))
@@ -442,7 +453,7 @@ impl Handler<SetHook> for Executor {
                 future::Either::B(get_vn)
             }
         }.and_then(|(vn, this)| -> SetHookResponseFuture {
-            let put_hook = actors::db::PutHook { vn, version, code };
+            let put_hook = db::PutHook { vn, version, code };
             let put_hook = this.db.send(put_hook).map_err(|error| {
                 error!("Error processing PutHook: {}", error);
                 ResponseError::Internal(format!("{}", error))
@@ -488,7 +499,7 @@ impl Handler<DelHook> for Executor {
                 if kind.short() != "v" {
                     return Box::new(future::err(ResponseError::InvalidVnId(kind, id)));
                 }
-                let get_vn = actors::db::GetVn(id);
+                let get_vn = db::GetVn(id);
                 let get_vn = this.db.send(get_vn).map_err(|error| {
                     error!("Error processing GetVn: {}", error);
                     ResponseError::Internal(format!("{}", error))
@@ -523,7 +534,7 @@ impl Handler<DelHook> for Executor {
                 future::Either::B(get_vn)
             }
         }.and_then(move |(vn, this)| {
-            let del_hook = actors::db::DelHook { vn, version };
+            let del_hook = db::DelHook { vn, version };
             this.db.send(del_hook).map_err(|error| {
                 error!("Error processing DelHook: {}", error);
                 ResponseError::Internal(format!("{}", error))
@@ -574,7 +585,7 @@ impl Handler<DelVn> for Executor {
                 future::Either::B(get_vn)
             }
         }.and_then(|(id, this)| {
-            let del_vn = actors::db::DelVnData(id);
+            let del_vn = db::DelVnData(id);
             this.db.send(del_vn).map_err(|error| {
                 error!("Error processing DelVnData: {}", error);
                 ResponseError::Internal(format!("{}", error))
@@ -601,16 +612,16 @@ impl GetVndbObject {
     }
 }
 impl Message for GetVndbObject {
-    type Result = Result<actors::vndb::response::Results, ResponseError>;
+    type Result = Result<vndb::response::Results, ResponseError>;
 }
-type GetVndbObjectResponseFuture = Box<Future<Item=actors::vndb::response::Results, Error=ResponseError>>;
+type GetVndbObjectResponseFuture = Box<Future<Item=vndb::response::Results, Error=ResponseError>>;
 impl Handler<GetVndbObject> for Executor {
     type Result = GetVndbObjectResponseFuture;
 
     fn handle(&mut self, msg: GetVndbObject, _ctx: &mut Self::Context) -> Self::Result {
         let GetVndbObject {id, kind} = msg;
 
-        let get_ref = actors::vndb::Get::get_by_id(kind.clone(), id);
+        let get_ref = vndb::Get::get_by_id(kind.clone(), id);
         let get_ref = self.vndb.send(get_ref.into()).map_err(|error| {
             error!("Error processing GetVndbObject: {}", error);
             ResponseError::Internal(format!("{}", error))

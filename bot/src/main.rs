@@ -21,7 +21,6 @@ use std::mem;
 
 mod config;
 mod command;
-mod handler;
 mod irc;
 mod discord;
 
@@ -31,11 +30,9 @@ fn run() -> Result<i32, String> {
     let config = config::load()?;
     let system = actix::System::new("roseline");
 
-    let db: actix::Addr<actix::Syn, _> = actors::db::Db::start_threaded(2);
-    let vndb: actix::Addr<actix::Unsync, _> = Supervisor::start(|_| actors::vndb::Vndb::new());
-    let executor: actix::Addr<actix::Syn, _> = handler::Executor::new(vndb.clone(), db.clone()).start();
-    let executor_clone = executor.clone();
-    let _irc: actix::Addr<actix::Unsync, _> = Supervisor::start(move |_| irc::Irc::new(config, executor_clone));
+    let executor: actix::Addr<actix::Syn, _> = actors::exec::Executor::default_threads(2).start();
+    let executor2 = executor.clone();
+    let _irc: actix::Addr<actix::Unsync, _> = Supervisor::start(move |_| irc::Irc::new(config, executor2));
 
     thread::spawn(move || {
         loop {

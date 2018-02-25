@@ -17,12 +17,11 @@ use self::serenity::framework::standard::{
 use self::serenity::model::channel::Message;
 use self::futures::Future;
 
-use ::handler;
 use ::command;
 
 struct CommandHandler;
 impl typemap::Key for CommandHandler {
-    type Value = actix::Addr<actix::Syn, handler::Executor>;
+    type Value = actix::Addr<actix::Syn, actors::exec::Executor>;
 }
 
 struct Handler;
@@ -40,7 +39,7 @@ impl EventHandler for Handler {
     }
 }
 
-pub fn client(executor: actix::Addr<actix::Syn, handler::Executor>) -> Client {
+pub fn client(executor: actix::Addr<actix::Syn, actors::exec::Executor>) -> Client {
     let token = include_str!("../discord.token");
     // Login with a bot token from the environment
     let mut client = Client::new(token, Handler).expect("Error creating client");
@@ -85,7 +84,7 @@ fn vn(context: &mut Context, message: &Message, args: Args) -> Result<(), Comman
         data.get::<CommandHandler>().unwrap().clone()
     };
 
-    let get_vn = handler::FindVn::new(args.full().to_string());
+    let get_vn = actors::exec::FindVn::new(args.full().to_string());
     let result = executor.send(get_vn).wait().map_err(|error| CommandError(format!("{}", error)))?;
 
     match result {
@@ -111,7 +110,7 @@ fn hook(context: &mut Context, message: &Message, args: Args) -> Result<(), Comm
             data.get::<CommandHandler>().unwrap().clone()
         };
 
-        let get_hook = handler::GetHook(args.full().to_string());
+        let get_hook = actors::exec::GetHook(args.full().to_string());
         let result = executor.send(get_hook).wait().map_err(|error| CommandError(format!("{}", error)))?;
 
         match result {
@@ -143,7 +142,7 @@ fn set_hook(context: &mut Context, message: &Message, args: Args) -> Result<(), 
         let version = args.next().unwrap();
         let code = args.next().unwrap();
 
-        let set_hook = handler::SetHook::new(title.clone(), version, code);
+        let set_hook = actors::exec::SetHook::new(title.clone(), version, code);
         let result = executor.send(set_hook).wait().map_err(|error| CommandError(format!("{}", error)))?;
 
         match result {
@@ -174,7 +173,7 @@ fn del_hook(context: &mut Context, message: &Message, args: Args) -> Result<(), 
         let title: String = args.next().unwrap();
         let version = args.next().unwrap();
 
-        let del_hook = handler::DelHook::new(title.clone(), version);
+        let del_hook = actors::exec::DelHook::new(title.clone(), version);
         let result = executor.send(del_hook).wait().map_err(|error| CommandError(format!("{}", error)))?;
 
         match result {
@@ -197,7 +196,7 @@ fn del_vn(context: &mut Context, message: &Message, args: Args) -> Result<(), Co
             data.get::<CommandHandler>().unwrap().clone()
         };
 
-        let del_vn = handler::DelVn(args.full().to_string());
+        let del_vn = actors::exec::DelVn(args.full().to_string());
         let result = executor.send(del_vn).wait().map_err(|error| CommandError(format!("{}", error)))?;
 
         match result {
