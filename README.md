@@ -1,6 +1,8 @@
 # Roseline
 
-My IRC Bot.
+[![Discord](https://discordapp.com/api/guilds/417300579988275202/widget.png)](https://discord.gg/zSYEFb4)
+
+My IRC Bot to store AGTH hooks.
 
 ## Commands
 
