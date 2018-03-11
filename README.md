@@ -1,6 +1,7 @@
 # Roseline
 
 [![Discord](https://discordapp.com/api/guilds/417300579988275202/widget.png)](https://discord.gg/zSYEFb4)
+[Web interface](http://roseline.duckdns.org)
 
 My IRC Bot to store AGTH hooks.
 
