@@ -40,7 +40,7 @@ impl Index {
         Self {
             _parent: Base {},
             action,
-            caption
+            caption,
         }
     }
 }
