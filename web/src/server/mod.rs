@@ -32,6 +32,8 @@ use self::http::Error as HttpError;
 use self::http::header;
 
 use ::cmp;
+use ::net;
+
 use ::templates;
 
 use templates::Template;
@@ -189,7 +191,7 @@ fn application(state: State) -> Application<State> {
 }
 
 pub fn start() {
-    let addr = "127.0.0.1:80";
+    let addr = net::SocketAddrV4::new(net::Ipv4Addr::new(0, 0, 0, 0), 80);
     let cpu_num = cmp::max(num_cpus::get() / 2, 1);
 
     info!("Start server: Threads={} | Listening={}", cpu_num, addr);
