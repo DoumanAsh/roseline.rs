@@ -5,6 +5,7 @@ use ::vndb;
 use ::db;
 
 use ::mem;
+use ::io;
 
 use vndb::protocol::message::request::get::Type as VndbRequestType;
 use self::futures::{future, Future};
@@ -36,8 +37,8 @@ fn parse_vndb_ref(text: &str) -> Option<(VndbRequestType, u64)> {
 ///Performs execution of various commands
 ///that involves VNDB or DB
 pub struct Executor {
-    vndb: Addr<Unsync, vndb::Vndb>,
-    db: Addr<Syn, db::Db>,
+    pub vndb: Addr<Unsync, vndb::Vndb>,
+    pub db: Addr<Syn, db::Db>,
 }
 
 impl Executor {
@@ -633,6 +634,94 @@ impl Handler<GetVndbObject> for Executor {
         });
 
         Box::new(get_ref)
+    }
+}
+
+type OngoingVndbRequest = actix::dev::Request<Unsync, vndb::Vndb, vndb::Request>;
+pub struct SearchVnFutureResult {
+    page: u32,
+    title: String,
+    result: Option<Vec<vndb::response::results::Vn>>,
+    vndb: Addr<Unsync, vndb::Vndb>,
+}
+
+impl SearchVnFutureResult {
+    fn new(title: String, vndb: Addr<Unsync, vndb::Vndb>) -> Self {
+        Self {
+            page: 1,
+            title,
+            result: Some(Vec::new()),
+            vndb,
+        }
+    }
+
+    fn send_request(&mut self) -> OngoingVndbRequest {
+        let options = vndb::protocol::message::request::get::Options {
+            page: Some(self.page),
+            results: None,
+            sort: None,
+            reverse: None
+        };
+        let get_vn = vndb::Get::vn_by_title(&self.title).set_options(Some(options));
+        self.page += 1;
+        self.vndb.send(get_vn.into())
+    }
+
+    fn handle_response(&mut self, response: io::Result<vndb::protocol::message::Response>) -> Result<Option<Vec<vndb::response::results::Vn>>, ResponseError> {
+        let result = try_vndb_response!(Err response);
+        let result = try_vndb_results!(Err result);
+        let mut result = try_vndb_result_type!(Err result.vn());
+
+        let mut current_vns = self.result.take().unwrap();
+        current_vns.reserve(result.items.len());
+        for vn in result.items.drain(..) {
+            current_vns.push(vn);
+        }
+
+        //Potentially can be really big number of pages so take only first 10
+        match result.more {
+            true if self.page < 11 => {
+                self.result = Some(current_vns);
+                Ok(None)
+            },
+            _ => Ok(Some(current_vns))
+        }
+    }
+}
+
+///Search VNs by title
+pub struct SearchVn {
+    title: String
+}
+impl SearchVn {
+    pub fn new(title: String) -> Self {
+        Self {
+            title
+        }
+    }
+}
+impl Message for SearchVn {
+    type Result = Result<Vec<vndb::response::results::Vn>, ResponseError>;
+}
+type SearchVnResponseFuture = Box<Future<Item=Vec<vndb::response::results::Vn>, Error=ResponseError>>;
+impl Handler<SearchVn> for Executor {
+    type Result = SearchVnResponseFuture;
+
+    fn handle(&mut self, msg: SearchVn, _ctx: &mut Self::Context) -> Self::Result {
+        let SearchVn {title} = msg;
+        let search_vn = SearchVnFutureResult::new(title, self.vndb.clone());
+        let search_vn = future::loop_fn(search_vn, |mut search_vn| {
+            search_vn.send_request().map_err(|error| {
+                error!("Unexpected error with SearchVn: {}", error);
+                ResponseError::Internal(format!("{}", error))
+            }).and_then(|result| match search_vn.handle_response(result) {
+                Ok(Some(vns)) => Ok(future::Loop::Break(vns)),
+                Ok(None) => Ok(future::Loop::Continue(search_vn)),
+                Err(error) => Err(error)
+            })
+        });
+
+        Box::new(search_vn)
     }
 }
 

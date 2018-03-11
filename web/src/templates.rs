@@ -8,7 +8,7 @@ extern crate db;
 
 pub use self::askama::Template;
 
-use self::vndb::protocol::message::response::typed::VN;
+use self::vndb::protocol::message::response::results::Vn as TypedVn;
 
 use self::http::Error as HttpError;
 use self::actix_web::dev::Handler;
@@ -136,11 +136,11 @@ impl<'a> Search<'a> {
 pub struct VndbSearch<'a> {
     _parent: Base,
     title: &'a str,
-    vns: &'a VN
+    vns: &'a Vec<TypedVn>
 }
 
 impl<'a> VndbSearch<'a> {
-    pub fn new(title: &'a str, vns: &'a VN) -> Self {
+    pub fn new(title: &'a str, vns: &'a Vec<TypedVn>) -> Self {
         Self {
             _parent: Base {},
             title,

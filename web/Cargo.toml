@@ -35,7 +35,7 @@ http = "0"
 actix = "0"
 
 [dependencies.actix-web]
-git = "https://github.com/actix/actix-web"
+version = "0"
 default-features = false
 features = ["tls"]
 

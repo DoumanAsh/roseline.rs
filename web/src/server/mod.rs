@@ -12,7 +12,7 @@ use self::futures::{
     Future
 };
 use self::actix::{
-    Supervisor
+    Actor
 };
 use self::actix_web::{
     Application,
@@ -31,8 +31,6 @@ use self::actix_web::dev::Handler;
 use self::http::Error as HttpError;
 use self::http::header;
 
-use ::utils::ResultExt;
-
 use ::cmp;
 use ::templates;
 
@@ -40,8 +38,8 @@ use templates::Template;
 
 #[derive(Clone)]
 struct State {
+    pub executor: self::actix::Addr<actix::Syn, actors::exec::Executor>,
     pub db: self::actix::Addr<actix::Syn, actors::db::Db>,
-    pub vndb: self::actix::Addr<actix::Syn, actors::vndb::Vndb>
 }
 
 fn internal_error(description: String) -> HttpResponse {
@@ -119,28 +117,16 @@ fn search_vndb(request: HttpRequest<State>) -> Box<Future<Item=HttpResponse, Err
 
     let query = query.to_string();
 
-    request.state().vndb.send(actors::vndb::Get::vn_by_title(&query).into())
-                        .and_then(move |result| match result {
-                            Ok(result) => match result {
-                                actors::vndb::Response::Results(result) => match result.vn() {
-                                    Ok(vns) => {
-                                        let template = templates::VndbSearch::new(&query, &vns);
-                                        Ok(serve_bytes(template.render().unwrap().into_bytes(), "text/html; charset=utf-8"))
-                                    },
-                                    Err(error) => {
-                                        error!("Unable to parse results of VN query. Error: {}", error);
-                                        Ok(internal_error("VNDB returned trash...".to_string()))
-                                    }
-                                },
-                                other => {
-                                    warn!("Unexpected response from VNDB: {:?}", other);
-                                    Ok(internal_error("VNDB returned trash...".to_string()))
-                                }
-                            },
-                            //TODO: handle error with re-try as it is likely due to connection loss.
-                            Err(error) => Ok(internal_error(format!("{}", error)))
-                        }).or_else(|error| Ok(internal_error(format!("{}", error))))
-                        .responder()
+    let search = actors::exec::SearchVn::new(query.clone());
+    let search = request.state().executor.send(search);
+    search.and_then(move |result| match result {
+        Ok(vns) => {
+            let template = templates::VndbSearch::new(&query, &vns);
+            Ok(serve_bytes(template.render().unwrap().into_bytes(), "text/html; charset=utf-8"))
+        },
+        Err(error) => Ok(internal_error(format!("{}", error)))
+    }).or_else(|error| Ok(internal_error(format!("{}", error))))
+    .responder()
 }
 
 fn vn(request: HttpRequest<State>) -> Box<Future<Item=HttpResponse, Error=HttpError>> {
@@ -209,9 +195,14 @@ pub fn start() {
     info!("Start server: Threads={} | Listening={}", cpu_num, addr);
 
     let system = actix::System::new("web");
+
+    let executor = actors::exec::Executor::default_threads(cpu_num);
+    let db = executor.db.clone();
+    let executor = executor.start();
+
     let state = State {
-        db: actors::db::Db::start_threaded(cpu_num),
-        vndb: Supervisor::start(|_| actors::vndb::Vndb::new())
+        executor,
+        db,
     };
 
     HttpServer::new(move || application(state.clone())).bind(addr).expect("To bind HttpServer")
