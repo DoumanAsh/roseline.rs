@@ -3,6 +3,7 @@ use std::env;
 use std::path::PathBuf;
 use std::fs;
 use std::thread;
+use std::time;
 
 fn get_dirs() -> (PathBuf, PathBuf, PathBuf, PathBuf) {
     let mut current_dir = env::current_exe().unwrap();
@@ -27,6 +28,8 @@ fn get_dirs() -> (PathBuf, PathBuf, PathBuf, PathBuf) {
 }
 
 fn main() {
+    const TIMEOUT_MS: u64 = 10000;
+
     let (roseline_log, roseline_exe, roseline_web_log, roseline_web_exe) = get_dirs();
     println!("Roseline={}\nLog={}", roseline_exe.display(), roseline_log.display());
     println!("Roseline-web={}\nLog={}", roseline_web_exe.display(), roseline_web_log.display());
@@ -63,7 +66,10 @@ fn main() {
                 Ok(status) => {
                     match status.success() {
                         true => println!("Roseline successfully finished"),
-                        false => println!("Roseline finished with errors"),
+                        false => {
+                            println!("Roseline finished with errors");
+                            thread::sleep(time::Duration::from_millis(TIMEOUT_MS));
+                        }
                     }
                 },
                 Err(error) => {
@@ -81,7 +87,10 @@ fn main() {
             Ok(status) => {
                 match status.success() {
                     true => println!("Roseline-web successfully finished"),
-                    false => println!("Roseline-web finished with errors"),
+                    false => {
+                        println!("Roseline-web finished with errors");
+                        thread::sleep(time::Duration::from_millis(TIMEOUT_MS));
+                    }
                 }
             },
             Err(error) => {
