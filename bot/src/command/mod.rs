@@ -85,7 +85,8 @@ pub enum Command {
     DelVn(DelVn),
     Refs(Refs),
     Ignore(String),
-    IgnoreList
+    IgnoreList,
+    Shutdown
 }
 
 pub fn extract_vndb_references(text: &str) -> Option<Refs> {
@@ -216,6 +217,7 @@ impl Command {
                         version
                     }))
                 },
+                Some("_shutdown") => Some(Command::Shutdown),
                 _ => None
             }
         }

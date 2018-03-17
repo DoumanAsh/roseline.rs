@@ -133,7 +133,11 @@ impl StreamHandler<IrcMessage, IrcError> for Irc {
                         else {
                             break;
                         }
-                    }
+                    },
+                    command::Command::Shutdown => {
+                        ctx.notify(actix::msgs::SystemExit(0));
+                        Arbiter::system().do_send(actix::msgs::SystemExit(0));
+                    },
                 }
             },
             Command::JOIN(chanlist, _, _) => info!("{:?} joined {}", from, chanlist),
@@ -350,6 +354,23 @@ impl Handler<GetRefResponse> for Irc {
         ctx.spawn(get_ref);
 
         Ok(())
+    }
+}
+
+impl Handler<actix::msgs::SystemExit> for Irc {
+    type Result = <actix::msgs::SystemExit as Message>::Result;
+
+    fn handle(&mut self, _msg: actix::msgs::SystemExit, _ctx: &mut Self::Context) -> Self::Result {
+        warn!("Shutdown command is issued!");
+
+        let client = self.client.as_ref().unwrap();
+
+        if let Some(chanlist) = client.list_channels() {
+            if chanlist.len() > 0 {
+                debug!("Leaving chanlist={:?}", &chanlist);
+                let _ = client.send_part(&chanlist.join(","));
+            }
+        };
     }
 }
 
