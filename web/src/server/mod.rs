@@ -67,12 +67,16 @@ fn serve_bytes<B: Into<Body>>(bytes: B, content_type: &str) -> HttpResponse {
 }
 
 ///Serves static files with max-age 1 day
-fn serve_static<B: Into<Body>>(bytes: B, content_type: &str) -> HttpResponse {
+fn serve_static_w_enc<B: Into<Body>>(bytes: B, content_type: &str, encoding: ContentEncoding) -> HttpResponse {
     HttpResponse::Ok().content_type(content_type)
-                      .content_encoding(ContentEncoding::Auto)
+                      .content_encoding(encoding)
                       .header(header::CACHE_CONTROL, "max-age=86400")
                       .body(bytes.into())
                       .unwrap_or_else(|error| internal_error(format!("{}", error)))
+}
+
+fn serve_static<B: Into<Body>>(bytes: B, content_type: &str) -> HttpResponse {
+    serve_static_w_enc(bytes, content_type, ContentEncoding::Auto)
 }
 
 fn app_bundle_css(_: HttpRequest<State>) -> HttpResponse {
@@ -83,6 +87,11 @@ fn app_bundle_css(_: HttpRequest<State>) -> HttpResponse {
 fn app_bundle_js(_: HttpRequest<State>) -> HttpResponse {
     const JS: &'static [u8] = include_bytes!("../../static/app.bundle.js");
     serve_static(JS, "application/javascript; charset=utf-8")
+}
+
+fn roseline_png(_: HttpRequest<State>) -> HttpResponse {
+    const IMG: &'static [u8] = include_bytes!("../../static/Roseline.png");
+    serve_static_w_enc(IMG, "image/png", ContentEncoding::Identity)
 }
 
 fn search(request: HttpRequest<State>) -> Box<Future<Item=HttpResponse, Error=HttpError>> {
@@ -167,7 +176,7 @@ fn application(state: State) -> Application<State> {
                                   .middleware(default_headers())
                                   .middleware(middleware::normalizer::RemoveTrailingSlach::new())
                                   .resource("/", |res| {
-                                      res.method(Method::GET).h(templates::Index::new("/search", "Search Hook"));
+                                      res.method(Method::GET).h(templates::Index::new("/search", "Search AGTH Hook"));
                                   })
                                   .resource("/vndb", |res| {
                                       res.method(Method::GET).h(templates::Index::new("/vndb/search", "Search VNDB"));
@@ -177,6 +186,9 @@ fn application(state: State) -> Application<State> {
                                   })
                                   .resource("/app.bundle.js", |res| {
                                       res.method(Method::GET).f(app_bundle_js);
+                                  })
+                                  .resource("/Roseline.png", |res| {
+                                      res.method(Method::GET).f(roseline_png);
                                   })
                                   .resource("/search", |res| {
                                       res.method(Method::GET).f(search);
