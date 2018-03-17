@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::fs;
 use std::thread;
 use std::time;
+use std::process::exit;
 
 fn get_dirs() -> (PathBuf, PathBuf, PathBuf, PathBuf) {
     let mut current_dir = env::current_exe().unwrap();
@@ -27,6 +28,16 @@ fn get_dirs() -> (PathBuf, PathBuf, PathBuf, PathBuf) {
     (roseline_log, roseline_exe, roseline_web_log, roseline_web_exe)
 }
 
+fn open_log(path: &PathBuf) -> fs::File {
+    match fs::OpenOptions::new().create(true).write(true).truncate(true).open(&path) {
+        Ok(file) => file,
+        Err(error) => {
+            eprintln!("{}: Unable to open log file. Error: {}", path.display(), error);
+            exit(1);
+        }
+    }
+}
+
 fn main() {
     const TIMEOUT_MS: u64 = 10000;
 
@@ -43,20 +54,8 @@ fn main() {
         return;
     }
 
-    let roseline_log = match fs::OpenOptions::new().append(true).create(true).open(&roseline_log) {
-        Ok(file) => file,
-        Err(error) => {
-            eprintln!("{}: Unable to open log file. Error: {}", roseline_log.display(), error);
-            return;
-        }
-    };
-    let roseline_web_log = match fs::OpenOptions::new().append(true).create(true).open(&roseline_web_log) {
-        Ok(file) => file,
-        Err(error) => {
-            eprintln!("{}: Unable to open log file. Error: {}", roseline_web_log.display(), error);
-            return;
-        }
-    };
+    let roseline_log = open_log(&roseline_log);
+    let roseline_web_log = open_log(&roseline_web_log);
 
     thread::spawn(move || {
         loop {

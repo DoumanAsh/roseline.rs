@@ -20,7 +20,6 @@ use self::actix_web::{
     HttpRequest,
     HttpResponse,
     Method,
-    middleware,
     AsyncResponder,
     Body
 };
@@ -37,6 +36,8 @@ use ::net;
 use ::templates;
 
 use templates::Template;
+
+mod middleware;
 
 #[derive(Clone)]
 struct State {
@@ -164,6 +165,7 @@ fn default_headers() -> middleware::DefaultHeaders {
 fn application(state: State) -> Application<State> {
     Application::with_state(state).middleware(middleware::Logger::default())
                                   .middleware(default_headers())
+                                  .middleware(middleware::normalizer::RemoveTrailingSlach::new())
                                   .resource("/", |res| {
                                       res.method(Method::GET).h(templates::Index::new("/search", "Search Hook"));
                                   })

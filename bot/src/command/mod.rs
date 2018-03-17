@@ -271,14 +271,6 @@ mod tests {
     }
 
     #[test]
-    fn should_valid_too_many_vn_hits() {
-        let expected = "There are too many hits='7'. Try yourself -> https://vndb.org/v/all?sq=Aoi+Tori";
-        let result = Text::too_many_vn_hits(7, "Aoi  \tTori".to_string());
-
-        assert_eq!(result.0, expected);
-    }
-
-    #[test]
     fn should_cmd_vn_ref() {
         let expected_refs = [
             Some((VndbRequestType::vn(), 1u64, true)),
