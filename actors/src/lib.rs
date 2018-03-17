@@ -6,7 +6,6 @@ extern crate slog_scope;
 use std::{
     time,
     io,
-    net,
     collections,
     fmt,
     mem

@@ -3,7 +3,6 @@ extern crate tokio_core;
 extern crate tokio_io;
 extern crate tokio_tls;
 extern crate native_tls;
-extern crate trust_dns_resolver;
 extern crate actix;
 extern crate vndb;
 
@@ -11,20 +10,18 @@ use self::futures::Future;
 use self::futures::unsync::oneshot;
 use self::native_tls::{TlsConnector};
 use self::tokio_tls::{TlsConnectorExt, TlsStream};
-use self::trust_dns_resolver::ResolverFuture;
-use self::trust_dns_resolver::config::{ResolverConfig, ResolverOpts};
 use self::tokio_core::net::TcpStream;
 use self::tokio_io::{AsyncRead};
 use self::tokio_io::codec::{FramedRead};
 use self::tokio_io::io::{WriteHalf};
 use self::actix::prelude::*;
+use self::actix::fut::FutureResult;
 use self::actix::io::{FramedWrite, WriteHandler};
 pub use self::vndb::protocol;
 
 use ::collections::VecDeque;
 use ::time;
 use ::io;
-use ::net;
 
 type TlsFramedWrite = WriteHalf<TlsStream<TcpStream>>;
 
@@ -48,6 +45,8 @@ impl Actor for Vndb {
     type Context = Context<Self>;
 
     fn started(&mut self, ctx: &mut Context<Self>) {
+        use self::actix::actors::{Connector, Connect};
+
         const API_DOMAIN: &'static str = "api.vndb.org";
         const API_PORT: u16 = 19535;
         const TIMEOUT: u64 = 1000;
@@ -68,27 +67,16 @@ impl Actor for Vndb {
             }
         };
 
-        let resolver = match ResolverFuture::from_system_conf(Arbiter::handle()) {
-            Ok(resolver) => resolver,
-            Err(error) => {
-                warn!("Unable to create system DNS resolver. Error: {}", error);
-                ResolverFuture::new(ResolverConfig::default(), ResolverOpts::default(), Arbiter::handle())
-            }
-        };
+        let connector = Arbiter::registry().get::<Connector>();
 
-        //into_actor() produces actix's future whose wait() method returns ()
-        //so all handling should be done inside combinators.
-        resolver.lookup_ip(API_DOMAIN).into_actor(self).map_err(|error, _act, ctx| {
-            error!("VNDB: Unable to resolve address. Error: {}", error);
+        connector.send(Connect::host_and_port(API_DOMAIN, API_PORT)).into_actor(self).map_err(|error, _act, ctx| {
+            error!("VNDB: Unable to send connect. Error: {}", error);
             ctx.run_later(time::Duration::new(TIMEOUT, 0), |_, ctx| ctx.stop());
-        }).and_then(|ips, act, _ctx| {
-            let ip = ips.iter().next().unwrap();
-            let addr = net::SocketAddr::new(ip, API_PORT);
-            info!("VNDB: Connecting...");
-            TcpStream::connect(&addr, Arbiter::handle()).into_actor(act).map_err(|error, _act, ctx| {
+        }).and_then(|connect_result, _act, ctx| {
+            FutureResult::from(connect_result.map_err(move |error| {
                 error!("VNDB: Unable to connect. Error: {}", error);
                 ctx.run_later(time::Duration::new(TIMEOUT, 0), |_, ctx| ctx.stop());
-            })
+            }))
         }).and_then(move |socket, act, _ctx| {
             info!("VNDB: Connected over TCP.");
             tls_ctx.connect_async(API_DOMAIN, socket).into_actor(act).map_err(|error, _act, ctx| {
