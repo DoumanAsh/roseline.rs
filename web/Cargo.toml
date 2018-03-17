@@ -38,7 +38,7 @@ actix = "0"
 [dependencies.actix-web]
 version = "0"
 default-features = false
-features = ["tls"]
+features = ["brotli"]
 
 [dependencies.log]
 version = "0"

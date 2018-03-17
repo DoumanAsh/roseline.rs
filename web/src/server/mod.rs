@@ -208,7 +208,6 @@ pub fn start() {
         executor,
         db,
     };
-
     HttpServer::new(move || application(state.clone())).bind(addr).expect("To bind HttpServer")
                                                        .threads(cpu_num)
                                                        .start();
