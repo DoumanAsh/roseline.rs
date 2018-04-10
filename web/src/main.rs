@@ -4,6 +4,8 @@ extern crate askama;
 extern crate slog;
 #[macro_use]
 extern crate slog_scope;
+#[macro_use]
+extern crate serde_derive;
 
 extern crate utils;
 

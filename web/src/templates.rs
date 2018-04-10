@@ -10,13 +10,12 @@ pub use self::askama::Template;
 
 use self::vndb::protocol::message::response::results::Vn as TypedVn;
 
-use self::http::Error as HttpError;
 use self::actix_web::dev::Handler;
 use self::actix_web::{
     HttpResponse,
     HttpRequest
 };
-use self::actix_web::headers::{
+use self::actix_web::http::{
     ContentEncoding
 };
 
@@ -46,7 +45,7 @@ impl Index {
 }
 
 impl<S> Handler<S> for Index {
-    type Result = Result<HttpResponse, HttpError>;
+    type Result = HttpResponse;
 
     fn handle(&mut self, _: HttpRequest<S>) -> Self::Result {
         HttpResponse::Ok().content_type("text/html; charset=utf-8")
@@ -88,7 +87,7 @@ impl NotFound {
 }
 
 impl<S> Handler<S> for NotFound {
-    type Result = Result<HttpResponse, HttpError>;
+    type Result = HttpResponse;
 
     fn handle(&mut self, _: HttpRequest<S>) -> Self::Result {
         HttpResponse::NotFound().content_type("text/html; charset=utf-8")

@@ -9,10 +9,10 @@ readme = "README.md"
 path = "../db"
 
 [dependencies]
-tokio-core = "0"
-tokio-io = "0"
-tokio-tls = "0"
-futures = "0"
+tokio-core = "0.1"
+tokio-io = "0.1"
+tokio-tls = "0.1"
+futures = "0.1"
 
 slog-scope = "4"
 

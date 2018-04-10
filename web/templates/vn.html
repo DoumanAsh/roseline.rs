@@ -8,16 +8,16 @@
     <h1>{{title}}</h1>
 
     <div class="c-table">
-    <div class="c-table__caption">Hooks</div>
-    <div class="c-table__row c-table__row--heading">
-        <span class="c-table__cell">Version</span>
-        <span class="c-table__cell">Code</span>
-    </div>
-    {% for hook in hooks %}
-        <div class="c-table__row">
-            <span class="c-table__cell"> {{hook.version}} </span>
-            <span class="c-table__cell"> {{hook.code}} </span>
+        <div class="c-table__caption">Hooks</div>
+        <div class="c-table__row c-table__row--heading">
+            <span class="c-table__cell">Version</span>
+            <span class="c-table__cell">Code</span>
         </div>
-    {% endfor %}
+        {% for hook in hooks %}
+            <div class="c-table__row">
+                <span class="c-table__cell"> {{hook.version}} </span>
+                <span class="c-table__cell"> {{hook.code}} </span>
+            </div>
+        {% endfor %}
     </div>
 {% endblock %}

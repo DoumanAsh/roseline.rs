@@ -15,7 +15,7 @@ path = "../utils"
 vndb = "0"
 
 actix = "0"
-futures = "0"
+futures = "0.1"
 
 lazy_static = "1"
 regex = "0"
@@ -26,7 +26,7 @@ serenity = "0"
 typemap = "0"
 
 [dependencies.irc]
-version = "0"
+version = "0.13"
 default-features = false
 features = ["ctcp", "toml"]
 

@@ -8,16 +8,16 @@
     <h1>{{title}}</h1>
 
     <div class="c-table">
-    <div class="c-table__caption">Found {{vns.len()}} VN</div>
-    <div class="c-table__row c-table__row--heading">
-        <span class="c-table__cell">Name</span>
-        <span class="c-table__cell">Release date</span>
-    </div>
-    {% for vn in vns %}
-        <div class="c-table__row c-table__row--clickable">
-            <a href="https://vndb.org/v{{vn.id}}" class="c-table__cell">{{vn.title.as_ref().unwrap()}}</a>
-            {% if vn.released.is_some() %}<span class="c-table__cell">{{vn.released.as_ref().unwrap()}}</span>{% else %}<span class="c-table__cell">TBA</span>{% endif %}
+        <div class="c-table__caption">Found {{vns.len()}} VN</div>
+        <div class="c-table__row c-table__row--heading">
+            <span class="c-table__cell">Name</span>
+            <span class="c-table__cell">Release date</span>
         </div>
-    {% endfor %}
+        {% for vn in vns %}
+            <div class="c-table__row c-table__row--clickable">
+                <a href="https://vndb.org/v{{vn.id}}" class="c-table__cell">{{vn.title.as_ref().unwrap()}}</a>
+                {% if vn.released.is_some() %}<span class="c-table__cell">{{vn.released.as_ref().unwrap()}}</span>{% else %}<span class="c-table__cell">TBA</span>{% endif %}
+            </div>
+        {% endfor %}
     </div>
 {% endblock %}

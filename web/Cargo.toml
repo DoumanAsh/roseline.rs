@@ -20,7 +20,7 @@ path = "../db"
 askama = "0"
 
 [dependencies]
-futures = "0"
+futures = "0.1"
 
 slog-scope = "4"
 
@@ -35,10 +35,13 @@ http = "0"
 bytes = "0"
 actix = "0"
 
+serde = "1.0"
+serde_derive = "1.0"
+
 [dependencies.actix-web]
-version = "0"
+version = "0.5"
 default-features = false
-features = ["brotli"]
+features = ["brotli", "cookie"]
 
 [dependencies.log]
 version = "0"
