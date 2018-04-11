@@ -69,7 +69,7 @@ fn serve_bytes<B: Into<Body>>(bytes: B, content_type: &str) -> HttpResponse {
 fn serve_static_w_enc<B: Into<Body>>(bytes: B, content_type: &str, encoding: ContentEncoding) -> HttpResponse {
     HttpResponse::Ok().content_type(content_type)
                       .content_encoding(encoding)
-                      .header(header::CACHE_CONTROL, "max-age=86400")
+                      .header(header::CACHE_CONTROL, "public, max-age=86400")
                       .body(bytes.into())
 }
 
@@ -154,18 +154,9 @@ fn vn(path: Path<u64>, state: State<AppState>) -> Box<Future<Item=HttpResponse, 
 
 }
 
-fn default_headers() -> middleware::DefaultHeaders {
-    middleware::DefaultHeaders::new().header(header::SERVER, "Roseline")
-                                     //Security headers
-                                     .header(header::X_DNS_PREFETCH_CONTROL, "off")
-                                     .header(header::X_XSS_PROTECTION, "1; mode=block")
-                                     .header(header::X_CONTENT_TYPE_OPTIONS, "nosniff")
-
-}
-
 fn application(state: AppState) -> App<AppState> {
     App::with_state(state).middleware(middleware::Logger::default())
-                          .middleware(default_headers())
+                          .middleware(middleware::DefaultHeaders)
                           .middleware(middleware::normalizer::RemoveTrailingSlach::new())
                           .resource("/", |res| {
                               res.method(Method::GET).h(templates::Index::new("/search", "Search AGTH Hook"));

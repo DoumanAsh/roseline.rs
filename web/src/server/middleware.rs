@@ -2,12 +2,38 @@ extern crate actix_web;
 extern crate http;
 extern crate bytes;
 
+use self::http::header;
 use self::http::uri;
-use self::actix_web::{HttpRequest, Result};
-use self::actix_web::middleware::{Middleware, Started};
-pub use self::actix_web::middleware::{DefaultHeaders, Logger};
+use self::actix_web::{HttpRequest, Result, HttpResponse};
+use self::actix_web::middleware::{Middleware, Started, Response};
+pub use self::actix_web::middleware::{Logger};
 
 use std::marker::PhantomData;
+
+///Default headers middleware
+pub struct DefaultHeaders;
+
+impl<S> Middleware<S> for DefaultHeaders {
+    fn response(&self, _: &mut HttpRequest<S>, mut resp: HttpResponse) -> Result<Response> {
+        const DEFAULT_HEADERS: [(header::HeaderName, &'static str); 4] = [
+            (header::SERVER, "Roseline"),
+            (header::X_DNS_PREFETCH_CONTROL, "off"),
+            (header::X_XSS_PROTECTION, "1; mode=block"),
+            (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
+        ];
+
+        {
+            let headers = resp.headers_mut();
+            for (key, value) in DEFAULT_HEADERS.iter() {
+                if !headers.contains_key(key) {
+                    headers.insert(key, header::HeaderValue::from_static(value));
+                }
+            }
+        }
+
+        Ok(Response::Done(resp))
+    }
+}
 
 pub trait SlashHandler {
     ///Normalizes path, if necessary.
