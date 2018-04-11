@@ -24,7 +24,7 @@ impl<S> Middleware<S> for DefaultHeaders {
 
         {
             let headers = resp.headers_mut();
-            for (key, value) in DEFAULT_HEADERS.iter() {
+            for &(ref key, ref value) in DEFAULT_HEADERS.iter() {
                 if !headers.contains_key(key) {
                     headers.insert(key, header::HeaderValue::from_static(value));
                 }
