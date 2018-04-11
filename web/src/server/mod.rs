@@ -37,7 +37,9 @@ use ::net;
 
 use ::templates;
 
-use templates::Template;
+use templates::{
+    ServeTemplate
+};
 
 mod middleware;
 
@@ -47,22 +49,9 @@ struct AppState {
     pub db: self::actix::Addr<actix::Syn, actors::db::Db>,
 }
 
-fn internal_error(description: String) -> HttpResponse {
-    let template = templates::InternalError::new(description);
-    HttpResponse::InternalServerError().content_type("text/html; charset=utf-8")
-                                       .content_encoding(ContentEncoding::Auto)
-                                       .body(template.render().unwrap().into_bytes())
-}
-
 fn redirect(to: &str) -> HttpResponse {
     HttpResponse::MovedPermanenty().header("Location", to)
                                    .finish()
-}
-
-fn serve_bytes<B: Into<Body>>(bytes: B, content_type: &str) -> HttpResponse {
-    HttpResponse::Ok().content_type(content_type)
-                      .content_encoding(ContentEncoding::Auto)
-                      .body(bytes.into())
 }
 
 ///Serves static files with max-age 1 day
@@ -110,10 +99,10 @@ fn search(query: Query<SearchQuery>, state: State<AppState>) -> Box<Future<Item=
             .and_then(move |result| match result {
                 Ok(result) => {
                     let template = templates::Search::new(&query, result);
-                    Ok(serve_bytes(template.render().unwrap().into_bytes(), "text/html; charset=utf-8"))
+                    Ok(template.serve_ok())
                 },
-                Err(error) => Ok(internal_error(format!("{}", error)))
-            }).or_else(|error| Ok(internal_error(format!("{}", error))))
+                Err(error) => Ok(templates::InternalError::new(error).response()),
+            }).or_else(|error| Ok(templates::InternalError::new(error).response()))
             .responder()
 }
 
@@ -130,10 +119,10 @@ fn search_vndb(query: Query<SearchQuery>, state: State<AppState>) -> Box<Future<
     search.and_then(move |result| match result {
         Ok(vns) => {
             let template = templates::VndbSearch::new(&query, &vns);
-            Ok(serve_bytes(template.render().unwrap().into_bytes(), "text/html; charset=utf-8"))
+            Ok(template.serve_ok())
         },
-        Err(error) => Ok(internal_error(format!("{}", error)))
-    }).or_else(|error| Ok(internal_error(format!("{}", error))))
+        Err(error) => Ok(templates::InternalError::new(error).response()),
+    }).or_else(|error| Ok(templates::InternalError::new(error).response()))
     .responder()
 }
 
@@ -144,14 +133,25 @@ fn vn(path: Path<u64>, state: State<AppState>) -> Box<Future<Item=HttpResponse, 
             .and_then(|result| match result {
                 Ok(Some(result)) => {
                     let template = templates::Vn::new(&result.data.title, result.hooks);
-                    Ok(serve_bytes(template.render().unwrap().into_bytes(), "text/html; charset=utf-8"))
-
+                    Ok(template.serve_ok())
                 },
-                Ok(None) => Ok(serve_bytes(templates::NotFound::new().render().unwrap().into_bytes(), "text/html; charset=utf-8")),
-                Err(error) => Ok(internal_error(format!("{}", error)))
-            }).or_else(|error| Ok(internal_error(format!("{}", error))))
+                Ok(None) => Ok(templates::NotFound::new().response()),
+                Err(error) => Ok(templates::InternalError::new(error).response()),
+            }).or_else(|error| Ok(templates::InternalError::new(error).response()))
             .responder()
+}
 
+fn db_dump(_: HttpRequest<AppState>) -> actix_web::Either<actix_web::fs::NamedFile, templates::NotFound> {
+    extern crate db;
+    use self::actix_web::fs::NamedFile;
+
+    match NamedFile::open(db::PATH) {
+        Ok(file) => actix_web::Either::A(file),
+        Err(_) => {
+            error!("Unable to open DB: {}", db::PATH);
+            actix_web::Either::B(templates::NotFound::new())
+        }
+    }
 }
 
 fn application(state: AppState) -> App<AppState> {
@@ -172,6 +172,9 @@ fn application(state: AppState) -> App<AppState> {
                           })
                           .resource("/Roseline.png", |res| {
                               res.method(Method::GET).f(roseline_png);
+                          })
+                          .resource("/dump", |res| {
+                              res.method(Method::GET).f(db_dump);
                           })
                           .resource("/search", |res| {
                               res.method(Method::GET).with2(search);

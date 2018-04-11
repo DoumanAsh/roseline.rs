@@ -6,6 +6,8 @@ extern crate vndb;
 
 extern crate db;
 
+use ::fmt;
+
 pub use self::askama::Template;
 
 use self::vndb::protocol::message::response::results::Vn as TypedVn;
@@ -13,11 +15,14 @@ use self::vndb::protocol::message::response::results::Vn as TypedVn;
 use self::actix_web::dev::Handler;
 use self::actix_web::{
     HttpResponse,
-    HttpRequest
+    HttpRequest,
+    Responder,
+    error
 };
 use self::actix_web::http::{
     ContentEncoding
 };
+use self::http::header;
 
 use self::db::models;
 
@@ -79,10 +84,19 @@ pub struct NotFound {
 }
 
 impl NotFound {
+    #[inline]
     pub fn new() -> Self {
         Self {
             _parent: Base {},
         }
+    }
+
+    #[inline]
+    pub fn response(&self) -> HttpResponse {
+        HttpResponse::NotFound().content_type("text/html; charset=utf-8")
+                                .content_encoding(ContentEncoding::Auto)
+                                .header(header::CACHE_CONTROL, "public, max-age=86400")
+                                .body(self.render().unwrap().into_bytes())
     }
 }
 
@@ -90,25 +104,41 @@ impl<S> Handler<S> for NotFound {
     type Result = HttpResponse;
 
     fn handle(&mut self, _: HttpRequest<S>) -> Self::Result {
-        HttpResponse::NotFound().content_type("text/html; charset=utf-8")
-                                .content_encoding(ContentEncoding::Auto)
-                                .body(self.render().unwrap().into_bytes())
+        self.response()
+    }
+}
+
+impl Responder for NotFound {
+    type Item = HttpResponse;
+    type Error = error::Error;
+
+    fn respond_to(self, _: HttpRequest) -> Result<HttpResponse, error::Error> {
+        Ok(self.response())
     }
 }
 
 #[derive(Template)]
 #[template(path="500.html")]
-pub struct InternalError {
+pub struct InternalError<S: fmt::Display> {
     _parent: Base,
-    description: String
+    description: S
 }
 
-impl InternalError {
-    pub fn new(description: String) -> Self {
+impl<S: fmt::Display> InternalError<S> {
+    #[inline]
+    pub fn new(description: S) -> Self {
         Self {
             _parent: Base {},
             description
         }
+    }
+
+    #[inline]
+    pub fn response(&self) -> HttpResponse {
+        HttpResponse::InternalServerError().content_type("text/html; charset=utf-8")
+                                           .content_encoding(ContentEncoding::Auto)
+                                           .header(header::CACHE_CONTROL, "public, max-age=86400")
+                                           .body(self.render().unwrap().into_bytes())
     }
 }
 
@@ -146,4 +176,21 @@ impl<'a> VndbSearch<'a> {
             vns
         }
     }
+}
+
+pub trait ServeTemplate: Template {
+    #[inline]
+    fn serve(&self, status: http::StatusCode) -> HttpResponse {
+        HttpResponse::build(status).content_type("text/html; charset=utf-8")
+                                   .content_encoding(ContentEncoding::Auto)
+                                   .body(self.render().unwrap().into_bytes())
+    }
+
+    #[inline]
+    fn serve_ok(&self) -> HttpResponse {
+        self.serve(http::StatusCode::OK)
+    }
+}
+
+impl<S: Template> ServeTemplate for S {
 }

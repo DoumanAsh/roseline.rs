@@ -26,6 +26,8 @@ pub use diesel::{
     TextExpressionMethods
 };
 
+pub const PATH: &'static str = "./roseline.db";
+
 use utils::ResultExt;
 
 pub struct Db {
@@ -34,7 +36,7 @@ pub struct Db {
 
 impl Db {
     pub fn new() -> Result<Self, String> {
-        let conn = SqliteConnection::establish("./roseline.db").format_err("To start DB")?;
+        let conn = SqliteConnection::establish(PATH).format_err("To start DB")?;
         sql_query(schema::create::VNS).execute(&conn).format_err("create table")?;
         sql_query(schema::create::HOOKS).execute(&conn).format_err("create table")?;
 
