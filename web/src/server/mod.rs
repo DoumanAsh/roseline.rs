@@ -174,7 +174,7 @@ fn application(state: AppState) -> App<AppState> {
                           .resource("/Roseline.png", |res| {
                               res.method(Method::GET).f(roseline_png);
                           })
-                          .resource("/dump", |res| {
+                          .resource("/dump.db", |res| {
                               res.method(Method::GET).f(db_dump);
                           })
                           .resource("/search", |res| {
