@@ -11,6 +11,7 @@ extern crate utils;
 
 use utils::log;
 
+use std::io;
 use std::fmt;
 use std::cmp;
 use std::net;

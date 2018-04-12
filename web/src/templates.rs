@@ -142,6 +142,15 @@ impl<S: fmt::Display> InternalError<S> {
     }
 }
 
+impl<S: fmt::Display> Responder for InternalError<S> {
+    type Item = HttpResponse;
+    type Error = error::Error;
+
+    fn respond_to(self, _: HttpRequest) -> Result<HttpResponse, error::Error> {
+        Ok(self.response())
+    }
+}
+
 #[derive(Template)]
 #[template(path="search.html")]
 pub struct Search<'a> {

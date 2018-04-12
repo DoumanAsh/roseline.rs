@@ -32,6 +32,7 @@ use self::actix_web::http::{
 use self::http::Error as HttpError;
 use self::http::header;
 
+use ::io;
 use ::cmp;
 use ::net;
 
@@ -141,15 +142,15 @@ fn vn(path: Path<u64>, state: State<AppState>) -> Box<Future<Item=HttpResponse, 
             .responder()
 }
 
-fn db_dump(_: HttpRequest<AppState>) -> actix_web::Either<actix_web::fs::NamedFile, templates::NotFound> {
+fn db_dump(_: HttpRequest<AppState>) -> actix_web::Either<actix_web::fs::NamedFile, templates::InternalError<io::Error>> {
     extern crate db;
     use self::actix_web::fs::NamedFile;
 
     match NamedFile::open(db::PATH) {
         Ok(file) => actix_web::Either::A(file),
-        Err(_) => {
-            error!("Unable to open DB: {}", db::PATH);
-            actix_web::Either::B(templates::NotFound::new())
+        Err(error) => {
+            error!("Unable to open DB: {}. Error: {}", db::PATH, error);
+            actix_web::Either::B(templates::InternalError::new(error))
         }
     }
 }
