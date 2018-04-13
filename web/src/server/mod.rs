@@ -19,7 +19,6 @@ use self::actix_web::{
     HttpRequest,
     HttpResponse,
     AsyncResponder,
-    Body,
     State,
     Path,
     Query
@@ -27,7 +26,6 @@ use self::actix_web::{
 use self::actix_web::server::HttpServer;
 use self::actix_web::http::{
     Method,
-    ContentEncoding
 };
 use self::http::Error as HttpError;
 use self::http::header;
@@ -43,6 +41,7 @@ use templates::{
 };
 
 mod middleware;
+mod statics;
 
 #[derive(Clone)]
 struct AppState {
@@ -50,36 +49,13 @@ struct AppState {
     pub db: self::actix::Addr<actix::Syn, actors::db::Db>,
 }
 
+fn not_allowed<S>(_: HttpRequest<S>) -> HttpResponse {
+    HttpResponse::MethodNotAllowed().finish()
+}
+
 fn redirect(to: &str) -> HttpResponse {
-    HttpResponse::MovedPermanenty().header("Location", to)
+    HttpResponse::MovedPermanenty().header(header::LOCATION, to)
                                    .finish()
-}
-
-///Serves static files with max-age 1 day
-fn serve_static_w_enc<B: Into<Body>>(bytes: B, content_type: &str, encoding: ContentEncoding) -> HttpResponse {
-    HttpResponse::Ok().content_type(content_type)
-                      .content_encoding(encoding)
-                      .header(header::CACHE_CONTROL, "public, max-age=86400")
-                      .body(bytes.into())
-}
-
-fn serve_static<B: Into<Body>>(bytes: B, content_type: &str) -> HttpResponse {
-    serve_static_w_enc(bytes, content_type, ContentEncoding::Auto)
-}
-
-fn app_bundle_css(_: HttpRequest<AppState>) -> HttpResponse {
-    const CSS: &'static [u8] = include_bytes!("../../static/app.bundle.css");
-    serve_static(CSS, "text/css; charset=utf-8")
-}
-
-fn app_bundle_js(_: HttpRequest<AppState>) -> HttpResponse {
-    const JS: &'static [u8] = include_bytes!("../../static/app.bundle.js");
-    serve_static(JS, "application/javascript; charset=utf-8")
-}
-
-fn roseline_png(_: HttpRequest<AppState>) -> HttpResponse {
-    const IMG: &'static [u8] = include_bytes!("../../static/Roseline.png");
-    serve_static_w_enc(IMG, "image/png", ContentEncoding::Identity)
 }
 
 #[derive(Deserialize)]
@@ -161,30 +137,39 @@ fn application(state: AppState) -> App<AppState> {
                           .middleware(middleware::normalizer::RemoveTrailingSlach::new())
                           .resource("/", |res| {
                               res.method(Method::GET).h(templates::Index::new("/search", "Search AGTH Hook"));
+                              res.route().f(not_allowed);
                           })
                           .resource("/vndb", |res| {
                               res.method(Method::GET).h(templates::Index::new("/vndb/search", "Search VNDB"));
+                              res.route().f(not_allowed);
                           })
                           .resource("/app.bundle.css", |res| {
-                              res.method(Method::GET).f(app_bundle_css);
+                              res.method(Method::GET).f(statics::app_bundle_css);
+                              res.route().f(not_allowed);
                           })
                           .resource("/app.bundle.js", |res| {
-                              res.method(Method::GET).f(app_bundle_js);
+                              res.method(Method::GET).f(statics::app_bundle_js);
+                              res.route().f(not_allowed);
                           })
                           .resource("/Roseline.png", |res| {
-                              res.method(Method::GET).f(roseline_png);
+                              res.method(Method::GET).f(statics::roseline_png);
+                              res.route().f(not_allowed);
                           })
                           .resource("/dump.db", |res| {
                               res.method(Method::GET).f(db_dump);
+                              res.route().f(not_allowed);
                           })
                           .resource("/search", |res| {
                               res.method(Method::GET).with2(search);
+                              res.route().f(not_allowed);
                           })
                           .resource("/vndb/search", |res| {
                               res.method(Method::GET).with2(search_vndb);
+                              res.route().f(not_allowed);
                           })
                           .resource("/vn/{id:[0-9]+}", |res| {
                               res.method(Method::GET).with2(vn);
+                              res.route().f(not_allowed);
                           }).default_resource(|res| {
                               res.route().h(templates::NotFound::new());
                           })
