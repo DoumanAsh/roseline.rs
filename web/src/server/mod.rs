@@ -155,6 +155,10 @@ fn application(state: AppState) -> App<AppState> {
                               res.method(Method::GET).f(statics::roseline_png);
                               res.route().f(not_allowed);
                           })
+                          .resource("/favicon.png", |res| {
+                              res.method(Method::GET).f(statics::favicon);
+                              res.route().f(not_allowed);
+                          })
                           .resource("/dump.db", |res| {
                               res.method(Method::GET).f(db_dump);
                               res.route().f(not_allowed);

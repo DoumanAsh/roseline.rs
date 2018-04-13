@@ -31,3 +31,8 @@ pub fn roseline_png<S>(_: HttpRequest<S>) -> HttpResponse {
     const IMG: &'static [u8] = include_bytes!("../../static/Roseline.png");
     serve(IMG, "image/png", header::ContentEncoding::Identity)
 }
+
+pub fn favicon<S>(_: HttpRequest<S>) -> HttpResponse {
+    const IMG: &'static [u8] = include_bytes!("../../static/favicon.png");
+    serve(IMG, "image/png", header::ContentEncoding::Identity)
+}
