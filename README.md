@@ -1,5 +1,6 @@
 # Roseline
 
+[![Build Status](https://travis-ci.org/DoumanAsh/roseline.rs.svg?branch=master)](https://travis-ci.org/DoumanAsh/roseline.rs)
 [![Discord](https://discordapp.com/api/guilds/417300579988275202/widget.png)](https://discord.gg/zSYEFb4)
 [Web interface](http://roseline.duckdns.org)
 
