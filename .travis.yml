@@ -1,0 +1,49 @@
+language: rust
+
+services:
+  - docker
+
+env:
+  global:
+    - PROJECT_NAME=roseline
+
+matrix:
+  include:
+    - os: linux
+      rust: stable
+      env: TARGET=x86_64-unknown-linux-gnu
+      cache: cargo
+    - os: linux
+      rust: stable
+      env: TARGET=armv7-unknown-linux-gnueabihf
+      addons:
+        apt:
+          packages: *armhf
+
+sudo: false
+
+install:
+  - cargo install cross
+
+script:
+  - echo -n $DISCORD_TOKEN > bot/discord.token
+  - cross build --target $TARGET
+  - cross test --target $TARGET
+
+before_deploy:
+  - cross build --release --target $TARGET
+  - zip "$PROJECT_NAME-$TRAVIS_TAG-$TARGET.zip" -j target/$TARGET/release/fie fie.toml
+
+deploy:
+  provider: releases
+  api_key: $GIT_TOKEN
+  file_glob: true
+  file: ${PROJECT_NAME}-${TRAVIS_TAG}-${TARGET}*
+  # don't delete the artifacts from previous phases
+  skip_cleanup: true
+  overwrite: true
+  # deploy when a new tag is pushed
+  on:
+    # channel to use to produce the release artifacts
+    condition: $TRAVIS_RUST_VERSION = stable
+    tags: true
