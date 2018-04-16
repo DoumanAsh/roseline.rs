@@ -31,7 +31,7 @@ script:
   - cross test --target $TARGET
 
 before_deploy:
-  - cross build --release --target $TARGET
+  - travis_wait 60 cross build --release --target $TARGET
   - zip "$PROJECT_NAME-$TRAVIS_TAG-$TARGET.zip" -j target/$TARGET/release/roseline roseline.toml target/$TARGET/release/roseline-web target/$TARGET/release/roseline_launch
 
 deploy:
