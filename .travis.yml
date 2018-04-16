@@ -32,7 +32,10 @@ script:
 
 before_deploy:
   - cross build --package roseline_launch --release --target $TARGET
-  - cross build -vv --package roseline --release --target $TARGET
+  - cross build --package utils --release --target $TARGET
+  - cross build --package db --release --target $TARGET
+  - cross build --package actors --release --target $TARGET
+  - cross build --package roseline --release --target $TARGET
   - cross build --package roseline-web --release --target $TARGET
   - zip "$PROJECT_NAME-$TRAVIS_TAG-$TARGET.zip" -j target/$TARGET/release/roseline roseline.toml target/$TARGET/release/roseline-web target/$TARGET/release/roseline_launch
 
