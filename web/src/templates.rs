@@ -63,14 +63,16 @@ impl<S> Handler<S> for Index {
 #[template(path="vn.html")]
 pub struct Vn<'a> {
     _parent: Base,
+    id: u64,
     title: &'a str,
     hooks: Vec<models::Hook>
 }
 
 impl<'a> Vn<'a> {
-    pub fn new(title: &'a str, hooks: Vec<models::Hook>) -> Self {
+    pub fn new(id:u64, title: &'a str, hooks: Vec<models::Hook>) -> Self {
         Self {
             _parent: Base {},
+            id,
             title,
             hooks
         }
@@ -183,6 +185,28 @@ impl<'a> VndbSearch<'a> {
             _parent: Base {},
             title,
             vns
+        }
+    }
+}
+
+#[derive(Template)]
+#[template(path="add_hook.html")]
+pub struct AddHook<'a> {
+    _parent: Base,
+    id: u64,
+    title: &'a str,
+    pub version: Option<&'a str>,
+    pub code: Option<&'a str>
+}
+
+impl<'a> AddHook<'a> {
+    pub fn new(id: u64, title: &'a str) -> Self {
+        Self {
+            _parent: Base {},
+            id,
+            title,
+            version: None,
+            code: None
         }
     }
 }

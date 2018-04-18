@@ -1,0 +1,31 @@
+{% extends "_base.html" %}
+
+{% block title %}Add Hook{% endblock %}
+
+{% block head %}{% endblock %}
+
+{% block content %}
+    <form class="form" action="/add_hook" method="POST" name="add_hook">
+        <h1 class="form__caption">Add new hook</h1>
+        <div class="o-form-element">
+            <label class="text_label">VNDB ID:</label>
+            <input required readonly minlength=1 min="0" class="c-field" name="id" text="number" value="{{id}}"/>
+        </div>
+        <div class="o-form-element">
+            <label class="text_label">Title:</label>
+            <input required readonly minlength=1 class="c-field" name="title" text="text" value="{{title}}"/>
+        </div>
+        <div class="o-form-element">
+            <label class="text_label">Version:</label>
+            {% if version.is_some() %} <input required readonly minlength=1 class="c-field" name="version" pattern="^(?!\s+$).+" text="text" value="{{version.unwrap()}}"/> {% else %} <input required minlength=1 class="c-field" name="version" pattern="^(?!\s+$).+" text="text"/> {% endif %}
+        </div>
+        <div class="o-form-element">
+            <label class="text_label">Code:</label>
+            <input required minlength=1 class="c-field" name="code" pattern="^(?!\s+$).+" text="text" value="{{code.unwrap_or("")}}"/>
+        </div>
+        <div class="o-form-element">
+            <label class="text_label"></label>
+            <input class="c-button c-button--brand" type="submit" value="Submit">
+        </div>
+    </form>
+{% endblock %}

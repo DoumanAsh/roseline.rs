@@ -5,18 +5,25 @@
 {% block head %}{% endblock %}
 
 {% block content %}
-    <h1>{{title}}</h1>
+    <h1 class="vn-header--title">{{title}}
+        <a class="link" title="Add new hook" href="/add_hook?id={{id}}&title={{title}}">+</a>
+    </h1>
 
     <div class="c-table">
         <div class="c-table__caption">Hooks</div>
         <div class="c-table__row c-table__row--heading">
             <span class="c-table__cell">Version</span>
             <span class="c-table__cell">Code</span>
+            <span class="c-table__cell">Actions</span>
         </div>
         {% for hook in hooks %}
             <div class="c-table__row">
-                <span class="c-table__cell"> {{hook.version}} </span>
-                <span class="c-table__cell"> {{hook.code}} </span>
+                <span class="c-table__cell">{{hook.version}}</span>
+                <span class="c-table__cell">{{hook.code}}</span>
+                <span class="c-table__cell">
+                    <a class="action_btn c-button c-button--rounded c-button--ghost-brand" href="/add_hook?id={{id}}&title={{title}}&version={{hook.version}}">Edit hook</a>
+                    <a class="action_btn c-button c-button--rounded c-button--ghost-error" href="/remove_hook?id={{id}}&title={{title}}&version={{hook.version}}">Remove hook</a>
+                </span>
             </div>
         {% endfor %}
     </div>

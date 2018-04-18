@@ -12,11 +12,15 @@
         <div class="c-table__row c-table__row--heading">
             <span class="c-table__cell">Name</span>
             <span class="c-table__cell">Release date</span>
+            <span class="c-table__cell">Actions</span>
         </div>
         {% for vn in vns %}
             <div class="c-table__row c-table__row--clickable">
                 <a href="https://vndb.org/v{{vn.id}}" class="c-table__cell">{{vn.title.as_ref().unwrap()}}</a>
                 {% if vn.released.is_some() %}<span class="c-table__cell">{{vn.released.as_ref().unwrap()}}</span>{% else %}<span class="c-table__cell">TBA</span>{% endif %}
+                <span class="c-table__cell">
+                    <a class="action_btn c-button c-button--rounded c-button--ghost-brand" href="/add_hook?id={{vn.id}}&title={{vn.title.as_ref().unwrap()}}">Add hook</a>
+                </span>
             </div>
         {% endfor %}
     </div>

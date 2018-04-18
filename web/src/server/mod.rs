@@ -21,7 +21,8 @@ use self::actix_web::{
     AsyncResponder,
     State,
     Path,
-    Query
+    Query,
+    Form
 };
 use self::actix_web::server::HttpServer;
 use self::actix_web::http::{
@@ -42,6 +43,11 @@ use templates::{
 
 mod middleware;
 mod statics;
+mod error_rsp;
+
+use self::error_rsp::ClientError;
+
+type FutureHttpResponse = Box<Future<Item=HttpResponse, Error=HttpError>>;
 
 #[derive(Clone)]
 struct AppState {
@@ -54,8 +60,13 @@ fn not_allowed<S>(_: HttpRequest<S>) -> HttpResponse {
 }
 
 fn redirect(to: &str) -> HttpResponse {
-    HttpResponse::MovedPermanenty().header(header::LOCATION, to)
-                                   .finish()
+    HttpResponse::Found().header(header::LOCATION, to)
+                         .finish()
+}
+
+fn redirect_post(to: &str) -> HttpResponse {
+    HttpResponse::SeeOther().header(header::LOCATION, to)
+                            .finish()
 }
 
 #[derive(Deserialize)]
@@ -63,14 +74,14 @@ struct SearchQuery {
     query: String
 }
 
-fn search(query: Query<SearchQuery>, state: State<AppState>) -> Box<Future<Item=HttpResponse, Error=HttpError>> {
+fn search(query: Query<SearchQuery>, state: State<AppState>) -> FutureHttpResponse {
     let SearchQuery{query} = query.into_inner();
 
     if let Ok(id) = query.parse::<u64>() {
         return Box::new(future::ok(redirect(&format!("/vn/{}", id))));
     }
 
-    let query = query.to_string();
+    let query = query.trim().to_string();
 
     state.db.send(actors::db::SearchVn(query.clone()))
             .and_then(move |result| match result {
@@ -83,13 +94,9 @@ fn search(query: Query<SearchQuery>, state: State<AppState>) -> Box<Future<Item=
             .responder()
 }
 
-fn search_vndb(query: Query<SearchQuery>, state: State<AppState>) -> Box<Future<Item=HttpResponse, Error=HttpError>> {
+fn search_vndb(query: Query<SearchQuery>, state: State<AppState>) -> FutureHttpResponse {
     let SearchQuery{query} = query.into_inner();
-    if let Ok(id) = query.parse::<u64>() {
-        return Box::new(future::ok(redirect(&format!("/vndb/vn/{}", id))));
-    }
-
-    let query = query.to_string();
+    let query = query.trim().to_string();
 
     let search = actors::exec::SearchVn::new(query.clone());
     let search = state.executor.send(search);
@@ -103,13 +110,13 @@ fn search_vndb(query: Query<SearchQuery>, state: State<AppState>) -> Box<Future<
     .responder()
 }
 
-fn vn(path: Path<u64>, state: State<AppState>) -> Box<Future<Item=HttpResponse, Error=HttpError>> {
+fn vn(path: Path<u64>, state: State<AppState>) -> FutureHttpResponse {
     let id = path.into_inner();
 
     state.db.send(actors::db::GetVnData(id))
             .and_then(|result| match result {
                 Ok(Some(result)) => {
-                    let template = templates::Vn::new(&result.data.title, result.hooks);
+                    let template = templates::Vn::new(result.data.id as u64, &result.data.title, result.hooks);
                     Ok(template.serve_ok())
                 },
                 Ok(None) => Ok(templates::NotFound::new().response()),
@@ -117,6 +124,107 @@ fn vn(path: Path<u64>, state: State<AppState>) -> Box<Future<Item=HttpResponse, 
             }).or_else(|error| Ok(templates::InternalError::new(error).response()))
             .responder()
 }
+
+#[derive(Deserialize)]
+struct AddHook {
+    id: u64,
+    title: String,
+    version: Option<String>,
+    code: Option<String>
+}
+
+fn add_hook_get(query: Query<AddHook>) -> HttpResponse {
+    let mut template = templates::AddHook::new(query.id, &query.title);
+    template.version = query.version.as_ref().map(|version| version.as_str());
+    template.code = query.code.as_ref().map(|version| version.as_str());
+    template.serve_ok()
+}
+
+fn add_hook_post(query: Form<AddHook>, state: State<AppState>) -> FutureHttpResponse {
+    let AddHook{id, title, version, code} = query.into_inner();
+
+    let version = match version {
+        Some(version) => version,
+        None => return Box::new(future::ok(ClientError::new("Missing version field").into())),
+    };
+    let code = match code {
+        Some(code) => code,
+        None => return Box::new(future::ok(ClientError::new("Missing code field").into())),
+    };
+
+    let title = title.trim().to_string();
+    let put_vn = actors::db::PutVn {
+        id,
+        title
+    };
+
+    let db = state.db.clone();
+    state.db.send(put_vn).then(move |result| -> FutureHttpResponse { match result {
+        Ok(Ok(vn)) => {
+            let put_hook = actors::db::PutHook {
+                vn,
+                version: version.trim().to_string(),
+                code: code.trim().to_string()
+            };
+
+            let put_hook = db.send(put_hook).then(|result| match result {
+                Ok(Ok(hook)) => Ok(redirect_post(&format!("/vn/{}", hook.vn_id))),
+                Ok(Err(error)) => Ok(templates::InternalError::new(error).response()),
+                Err(error) => Ok(templates::InternalError::new(error).response())
+            });
+
+            Box::new(put_hook)
+        },
+        Ok(Err(error)) => Box::new(future::ok(templates::InternalError::new(error).response())),
+        Err(error) => Box::new(future::ok(templates::InternalError::new(error).response()))
+    }}).responder()
+}
+
+fn remove_hook(id: u64, version: Option<String>, state: State<AppState>) -> FutureHttpResponse {
+    let version = match version {
+        Some(version) => version,
+        None => return Box::new(future::ok(ClientError::new("Missing version field").into())),
+    };
+
+    let get_vn = actors::db::GetVn(id);
+    state.db.send(get_vn).then(move |result| -> FutureHttpResponse { match result {
+        Ok(Ok(Some(vn))) => {
+            let del_hook = actors::db::DelHook {
+                vn,
+                version
+            };
+
+            let del_hook = state.db.send(del_hook).then(move |result| match result {
+                Ok(Ok(0)) => Ok(templates::NotFound::new().response()),
+                Ok(Ok(_)) => Ok(redirect_post(&format!("/vn/{}", id))),
+                Ok(Err(error)) => Ok(templates::InternalError::new(error).response()),
+                Err(error) => Ok(templates::InternalError::new(error).response())
+            });
+
+            Box::new(del_hook)
+        },
+        Ok(Ok(None)) => Box::new(future::ok(templates::NotFound::new().response())),
+        Ok(Err(error)) => Box::new(future::ok(templates::InternalError::new(error).response())),
+        Err(error) => Box::new(future::ok(templates::InternalError::new(error).response()))
+    }}).responder()
+}
+
+fn remove_hook_get(query: Query<AddHook>, state: State<AppState>) -> FutureHttpResponse {
+    let query = query.into_inner();
+    let id = query.id;
+    let version = query.version;
+
+    remove_hook(id, version, state)
+}
+
+fn remove_hook_del(query: Form<AddHook>, state: State<AppState>) -> FutureHttpResponse {
+    let query = query.into_inner();
+    let id = query.id;
+    let version = query.version;
+
+    remove_hook(id, version, state)
+}
+
 
 fn db_dump(_: HttpRequest<AppState>) -> actix_web::Either<actix_web::fs::NamedFile, templates::InternalError<io::Error>> {
     extern crate db;
@@ -168,6 +276,16 @@ fn application(state: AppState) -> App<AppState> {
                           })
                           .resource("/vndb/search", |res| {
                               res.method(Method::GET).with2(search_vndb);
+                              res.route().f(not_allowed);
+                          })
+                          .resource("/add_hook", |res| {
+                              res.method(Method::GET).with(add_hook_get);
+                              res.method(Method::POST).with2(add_hook_post);
+                              res.route().f(not_allowed);
+                          })
+                          .resource("/remove_hook", |res| {
+                              res.method(Method::GET).with2(remove_hook_get);
+                              res.method(Method::DELETE).with2(remove_hook_del);
                               res.route().f(not_allowed);
                           })
                           .resource("/vn/{id:[0-9]+}", |res| {
