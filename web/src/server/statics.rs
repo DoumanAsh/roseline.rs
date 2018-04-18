@@ -9,11 +9,11 @@ use self::actix_web::{
 
 use self::http::header;
 
-///Serves static files with max-age 1 day
+///Serves static files with max-age 1 week
 pub fn serve<B: Into<Body>>(bytes: B, content_type: &str, encoding: header::ContentEncoding) -> HttpResponse {
     HttpResponse::Ok().content_type(content_type)
                       .content_encoding(encoding)
-                      .header(header::CACHE_CONTROL, "public, max-age=86400")
+                      .header(header::CACHE_CONTROL, "public, max-age=604800")
                       .body(bytes.into())
 }
 
