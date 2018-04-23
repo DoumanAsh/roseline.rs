@@ -1,3 +1,6 @@
+extern crate sysinfo;
+use sysinfo::{ProcessExt, SystemExt};
+
 use std::process::Command;
 use std::env;
 use std::path::PathBuf;
@@ -5,6 +8,21 @@ use std::fs;
 use std::thread;
 use std::time;
 use std::process::exit;
+
+fn is_already_running() -> bool {
+    let mut system = sysinfo::System::new();
+    system.refresh_processes();
+
+    for (pid, process) in system.get_process_list() {
+        let name = process.name();
+        if name.contains("roseline") {
+            println!("Found Roseline's process '{}' with pid={}. Exiting...", name, pid);
+            return true;
+        }
+    }
+
+    false
+}
 
 fn get_dirs() -> (PathBuf, PathBuf, PathBuf, PathBuf) {
     let mut current_dir = env::current_exe().unwrap();
@@ -39,6 +57,10 @@ fn open_log(path: &PathBuf) -> fs::File {
 }
 
 fn main() {
+    if is_already_running() {
+        return;
+    }
+
     const TIMEOUT_MS: u64 = 10000;
 
     let (roseline_log, roseline_exe, roseline_web_log, roseline_web_exe) = get_dirs();

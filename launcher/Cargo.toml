@@ -6,3 +6,4 @@ license = "Apache-2.0"
 readme = "README.md"
 
 [dependencies]
+sysinfo = "0.5"
