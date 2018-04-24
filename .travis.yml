@@ -16,6 +16,7 @@ matrix:
       addons:
         apt:
           packages: *armhf
+            - gcc-arm-linux-gnueabihf
 
 sudo: false
 
