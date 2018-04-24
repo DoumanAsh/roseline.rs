@@ -21,6 +21,19 @@ matrix:
 install:
   - rustup target add $TARGET || true
 
+before_script:
+  - |
+    case "$TARGET" in
+      armv7-unknown-linux-gnueabihf)
+        mkdir -p ~/.cargo
+        cat >>~/.cargo/config <<EOF
+        [target.armv7-unknown-linux-gnueabihf]
+        linker = "arm-linux-gnueabihf-gcc"
+        EOF
+        ;;
+      *)
+        ;;
+
 script:
   - echo -n $DISCORD_TOKEN > bot/discord.token
   - cargo build --target $TARGET
