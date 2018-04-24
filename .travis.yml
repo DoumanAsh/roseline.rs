@@ -11,8 +11,8 @@ matrix:
       env: TARGET=x86_64-unknown-linux-gnu
       cache: cargo
     - os: linux
-      rust: stable
       env: TARGET=armv7-unknown-linux-gnueabihf
+      rust: stable
       addons:
         apt:
           packages: *armhf
