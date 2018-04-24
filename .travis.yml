@@ -15,7 +15,7 @@ matrix:
       rust: stable
       addons:
         apt:
-          packages: *armhf
+          packages: &armhf
             - gcc-arm-linux-gnueabihf
 
 install:
