@@ -1,8 +1,5 @@
 language: rust
 
-services:
-  - docker
-
 env:
   global:
     - PROJECT_NAME=roseline
@@ -14,26 +11,38 @@ matrix:
       env: TARGET=x86_64-unknown-linux-gnu
       cache: cargo
     - os: linux
-      rust: stable
       env: TARGET=armv7-unknown-linux-gnueabihf
+      rust: stable
       addons:
         apt:
-          packages: *armhf
-
-sudo: false
+          packages: &armhf
+            - gcc-arm-linux-gnueabihf
 
 install:
-  - cargo install cross || true
+  - rustup target add $TARGET || true
+
+before_script:
+  - |
+    case "$TARGET" in
+      armv7-unknown-linux-gnueabihf)
+        mkdir -p ~/.cargo
+        cat >>~/.cargo/config <<EOF
+        [target.armv7-unknown-linux-gnueabihf]
+        linker = "arm-linux-gnueabihf-gcc"
+        EOF
+        ;;
+      *)
+        ;;
 
 script:
   - echo -n $DISCORD_TOKEN > bot/discord.token
-  - cross build --target $TARGET
-  - cross test --target $TARGET
+  - cargo build --target $TARGET
+  - cargo test --target $TARGET
 
 before_deploy:
-  - cross build --package roseline_launch --release --target $TARGET
-  - travis_wait 40 sleep infinity & cross build --package roseline --release --target $TARGET
-  - cross build --package roseline-web --release --target $TARGET
+  - cargo build --package roseline_launch --release --target $TARGET
+  - travis_wait 40 sleep infinity & cargo build --package roseline --release --target $TARGET
+  - cargo build --package roseline-web --release --target $TARGET
   - zip "$PROJECT_NAME-$TRAVIS_TAG-$TARGET.zip" -j target/$TARGET/release/roseline roseline.toml target/$TARGET/release/roseline-web target/$TARGET/release/roseline_launch
 
 deploy:
