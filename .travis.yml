@@ -1,8 +1,5 @@
 language: rust
 
-services:
-  - docker
-
 env:
   global:
     - PROJECT_NAME=roseline
@@ -22,18 +19,15 @@ matrix:
 
 sudo: false
 
-install:
-  - cargo install cross || true
-
 script:
   - echo -n $DISCORD_TOKEN > bot/discord.token
-  - cross build --target $TARGET
-  - cross test --target $TARGET
+  - cargo build --target $TARGET
+  - cargo test --target $TARGET
 
 before_deploy:
-  - cross build --package roseline_launch --release --target $TARGET
-  - travis_wait 40 sleep infinity & cross build --package roseline --release --target $TARGET
-  - cross build --package roseline-web --release --target $TARGET
+  - cargo build --package roseline_launch --release --target $TARGET
+  - travis_wait 40 sleep infinity & cargo build --package roseline --release --target $TARGET
+  - cargo build --package roseline-web --release --target $TARGET
   - zip "$PROJECT_NAME-$TRAVIS_TAG-$TARGET.zip" -j target/$TARGET/release/roseline roseline.toml target/$TARGET/release/roseline-web target/$TARGET/release/roseline_launch
 
 deploy:
