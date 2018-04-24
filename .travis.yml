@@ -20,7 +20,7 @@ matrix:
 sudo: false
 
 install:
-  - rustup add target $TARGET || true
+  - rustup target add $TARGET || true
 
 script:
   - echo -n $DISCORD_TOKEN > bot/discord.token
