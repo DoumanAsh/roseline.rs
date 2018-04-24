@@ -19,6 +19,9 @@ matrix:
 
 sudo: false
 
+install:
+  - rustup add target $TARGET || true
+
 script:
   - echo -n $DISCORD_TOKEN > bot/discord.token
   - cargo build --target $TARGET
