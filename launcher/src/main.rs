@@ -10,12 +10,13 @@ use std::time;
 use std::process::exit;
 
 fn is_already_running() -> bool {
+    let self_pid = sysinfo::get_current_pid();
     let mut system = sysinfo::System::new();
     system.refresh_processes();
 
     for (pid, process) in system.get_process_list() {
         let name = process.name();
-        if name.contains("roseline") {
+        if name.contains("roseline") && self_pid != *pid {
             println!("Found Roseline's process '{}' with pid={}. Exiting...", name, pid);
             return true;
         }

@@ -35,7 +35,7 @@ impl EventHandler for Handler {
 
         let chan = msg.channel_id.name().unwrap_or("{}".to_string());
 
-        info!("{}|{}: {}", chan, msg.author.name, msg.content);
+        debug!("{}|{}: {}", chan, msg.author.name, msg.content);
     }
 }
 

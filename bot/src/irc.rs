@@ -85,7 +85,7 @@ impl StreamHandler<IrcMessage, IrcError> for Irc {
 
         match msg.command {
             Command::PRIVMSG(target, msg) => {
-                info!("from {:?} to {}: {}", from, target, msg);
+                debug!("from {:?} to {}: {}", from, target, msg);
 
                 let from = from.unwrap().to_string();
 
@@ -111,11 +111,13 @@ impl StreamHandler<IrcMessage, IrcError> for Irc {
                         true => {
                             let text = format!("Removed '{}' from ignore list", name);
                             self.ignores.remove(&name);
+                            info!("{}", &text);
                             ctx.notify(TextResponse::new(target, from, is_pm, text.into()))
                         },
                         false => {
                             let text = format!("Added '{}' to ignore list", name);
                             self.ignores.insert(name);
+                            info!("{}", &text);
                             ctx.notify(TextResponse::new(target, from, is_pm, text.into()))
                         }
                     },
@@ -140,10 +142,10 @@ impl StreamHandler<IrcMessage, IrcError> for Irc {
                     },
                 }
             },
-            Command::JOIN(chanlist, _, _) => info!("{:?} joined {}", from, chanlist),
-            Command::PART(chanlist, _) => info!("{:?} left {}", from, chanlist),
+            Command::JOIN(chanlist, _, _) => debug!("{:?} joined {}", from, chanlist),
+            Command::PART(chanlist, _) => debug!("{:?} left {}", from, chanlist),
             Command::KICK(chanlist, user, _) => {
-                info!("{:?} kicked {} out of {}", from, user, chanlist);
+                debug!("{:?} kicked {} out of {}", from, user, chanlist);
                 if user == client.current_nickname() {
                     ctx.run_later(duration::ms(500), move |act, ctx| {
                         match act.client.as_ref().unwrap().send_join(&chanlist) {

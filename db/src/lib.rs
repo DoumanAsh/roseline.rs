@@ -1,6 +1,6 @@
 #[macro_use]
 extern crate diesel;
-#[macro_use(slog_debug, slog_log, slog_record, slog_record_static, slog_b, slog_kv)]
+#[macro_use(slog_info, slog_debug, slog_log, slog_record, slog_record_static, slog_b, slog_kv)]
 extern crate slog;
 #[macro_use]
 extern crate slog_scope;
@@ -46,14 +46,14 @@ impl Db {
     }
 
     pub fn delete_vn(&self, id: i64) -> result::QueryResult<usize> {
-        debug!("DB: delete VN by id={}", id);
+        info!("DB: delete VN v{}", id);
         use schema::vns::dsl;
 
         diesel::delete(dsl::vns.filter(dsl::id.eq(id))).execute(&self.inner)
     }
 
     pub fn delete_hook(&self, vn: &models::Vn, version: &String) -> result::QueryResult<usize> {
-        debug!("DB: delete for {:?} with version='{}'", vn, &version);
+        info!("DB: delete version='{}' from v{}", &version, vn.id);
         use schema::hooks::dsl;
 
         diesel::delete(dsl::hooks.filter(dsl::vn_id.eq(&vn.id))
@@ -68,18 +68,18 @@ impl Db {
 
         match hook {
             Some(hook) => {
-                debug!("DB: found existing hook, update it");
+                info!("DB: found existing hook, update {:?} with code={}", hook, &code);
                 diesel::update(dsl::hooks.filter(dsl::id.eq(hook.id)))
                        .set(dsl::code.eq(&code))
                        .execute(&self.inner).map(move |_| models::HookView { vn_id: hook.vn_id, version: hook.version, code: code })
             }
             None => {
-                debug!("DB: adding new hook");
                 let hook = models::HookView {
                     vn_id: vn.id,
                     version,
                     code
                 };
+                info!("DB: adding new hook for v{}: version='{}' | hook='{}'", hook.vn_id, &hook.version, &hook.code);
                 diesel::insert_into(dsl::hooks).values(&hook)
                                                .execute(&self.inner).map(|_| hook)
             }
@@ -96,7 +96,7 @@ impl Db {
             Some(vn) => Ok(vn),
             None => {
                 let vn = models::Vn { id, title };
-                debug!("DB: put {:?}", &vn);
+                info!("DB: put {:?}", &vn);
 
                 diesel::insert_into(dsl::vns).values(&vn)
                                              .execute(&self.inner).map(|_| vn)
