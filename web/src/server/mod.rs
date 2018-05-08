@@ -225,7 +225,6 @@ fn remove_hook_del(query: Form<AddHook>, state: State<AppState>) -> FutureHttpRe
     remove_hook(id, version, state)
 }
 
-
 fn db_dump(_: HttpRequest<AppState>) -> actix_web::Either<actix_web::fs::NamedFile, templates::InternalError<io::Error>> {
     extern crate db;
     use self::actix_web::fs::NamedFile;
@@ -314,7 +313,7 @@ pub fn start() {
         db,
     };
     HttpServer::new(move || application(state.clone())).bind(addr).expect("To bind HttpServer")
-                                                       .threads(cpu_num)
+                                                       .workers(cpu_num)
                                                        .start();
 
     let _ = system.run();

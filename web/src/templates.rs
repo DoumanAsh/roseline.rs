@@ -114,7 +114,7 @@ impl Responder for NotFound {
     type Item = HttpResponse;
     type Error = error::Error;
 
-    fn respond_to(self, _: HttpRequest) -> Result<HttpResponse, error::Error> {
+    fn respond_to<S: 'static>(self, _: &HttpRequest<S>) -> Result<HttpResponse, error::Error> {
         Ok(self.response())
     }
 }
@@ -148,7 +148,7 @@ impl<S: fmt::Display> Responder for InternalError<S> {
     type Item = HttpResponse;
     type Error = error::Error;
 
-    fn respond_to(self, _: HttpRequest) -> Result<HttpResponse, error::Error> {
+    fn respond_to<State: 'static>(self, _: &HttpRequest<State>) -> Result<HttpResponse, error::Error> {
         Ok(self.response())
     }
 }
