@@ -12,10 +12,7 @@ matrix:
     - os: linux
       rust: stable
       env: TARGET=x86_64-unknown-linux-gnu
-      addons:
-        apt:
-          packages:
-            - openssl
+      cache: cargo
     - os: linux
       rust: stable
       env: TARGET=armv7-unknown-linux-gnueabihf
@@ -23,19 +20,21 @@ matrix:
         apt:
           packages: *armhf
 
-sudo: true
+sudo: false
 
 install:
-  - sudo apt update && sudo apt upgrade openssl
-  - openssl version
-  - sh ci/install.sh
+  - cargo install cross || true
 
 script:
   - echo -n $DISCORD_TOKEN > bot/discord.token
-  - sh ci/script.sh
+  - cross build --target $TARGET
+  - cross test --target $TARGET
 
 before_deploy:
-  - sh ci/before_deploy.sh
+  - cross build --package roseline_launch --release --target $TARGET
+  - travis_wait 40 sleep infinity & cross build --package roseline --release --target $TARGET
+  - cross build --package roseline-web --release --target $TARGET
+  - zip "$PROJECT_NAME-$TRAVIS_TAG-$TARGET.zip" -j target/$TARGET/release/roseline roseline.toml target/$TARGET/release/roseline-web target/$TARGET/release/roseline_launch
 
 deploy:
   provider: releases
