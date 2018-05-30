@@ -4,6 +4,7 @@ extern crate slog;
 extern crate lazy_panic;
 
 pub mod log;
+pub mod ssl;
 
 use std::fmt;
 use std::time;

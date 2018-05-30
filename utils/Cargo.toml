@@ -12,3 +12,6 @@ slog-term = "2"
 slog-stdlog = "3"
 slog = "2"
 lazy-panic = "0.3"
+
+[target."cfg(all(unix, not(target_os = \"macos\")))".dependencies]
+openssl-probe = "0"

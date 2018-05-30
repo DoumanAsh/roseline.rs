@@ -20,6 +20,7 @@ mod templates;
 mod server;
 
 fn run() -> Result<i32, String> {
+    utils::ssl::init();
     let _log_guard = log::init();
 
     server::start();
