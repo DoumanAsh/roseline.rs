@@ -22,7 +22,6 @@ use self::actix_web::{
 use self::actix_web::http::{
     ContentEncoding
 };
-use self::http::header;
 
 use self::db::models;
 
@@ -53,9 +52,7 @@ impl<S> Handler<S> for Index {
     type Result = HttpResponse;
 
     fn handle(&mut self, _: HttpRequest<S>) -> Self::Result {
-        HttpResponse::Ok().content_type("text/html; charset=utf-8")
-                          .content_encoding(ContentEncoding::Auto)
-                          .body(self.render().unwrap().into_bytes())
+        self.serve_ok()
     }
 }
 
@@ -95,10 +92,7 @@ impl NotFound {
 
     #[inline]
     pub fn response(&self) -> HttpResponse {
-        HttpResponse::NotFound().content_type("text/html; charset=utf-8")
-                                .content_encoding(ContentEncoding::Auto)
-                                .header(header::CACHE_CONTROL, "public, max-age=86400")
-                                .body(self.render().unwrap().into_bytes())
+        self.serve(http::StatusCode::NOT_FOUND)
     }
 }
 
@@ -137,10 +131,7 @@ impl<S: fmt::Display> InternalError<S> {
 
     #[inline]
     pub fn response(&self) -> HttpResponse {
-        HttpResponse::InternalServerError().content_type("text/html; charset=utf-8")
-                                           .content_encoding(ContentEncoding::Auto)
-                                           .header(header::CACHE_CONTROL, "public, max-age=86400")
-                                           .body(self.render().unwrap().into_bytes())
+        self.serve(http::StatusCode::INTERNAL_SERVER_ERROR)
     }
 }
 
@@ -208,6 +199,28 @@ impl<'a> AddHook<'a> {
             version: None,
             code: None
         }
+    }
+}
+
+#[derive(Template)]
+#[template(path="about.html")]
+pub struct About {
+    _parent: Base,
+}
+
+impl About {
+    pub fn new() -> Self {
+        Self {
+            _parent: Base {},
+        }
+    }
+}
+
+impl<S> Handler<S> for About {
+    type Result = HttpResponse;
+
+    fn handle(&mut self, _: HttpRequest<S>) -> Self::Result {
+        self.serve_ok()
     }
 }
 

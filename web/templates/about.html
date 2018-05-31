@@ -1,0 +1,34 @@
+{% extends "_base.html" %}
+
+{% block title %}About{% endblock %}
+
+{% block head %}{% endblock %}
+
+{% block content %}
+<article class="o-container o-container--large u-center-block">
+    <p>
+        This is a simple front-end to my AGTH database.
+        You can find AGTH hooks, add new ones or edit existing ones.
+        I allow write access to everyone for simplicity sake.
+        In exchange I expect fair use of it from you.
+        When malicious use will be detected I'll shutdown this site.
+    <p>
+    <h3>Adding new hook</h3>
+    <p>
+        You can use <a class="link" href="/vndb">VNDB search</a> to find any VN and
+        add new hook for this VN
+    <p>
+    <h3>Finding existing hook</h3>
+    <p>
+        On <a class="link" href="/">main page</a> you can search for VNs that has hooks.
+        Note that it expects english titles of VNs.
+        You can also quickly check whether there is any hook by using VNDB's ID:
+        <code>http://roseline.duckdns.org/vn/&lt;vndb_id&gt;</code>
+    <p>
+    <h3>When there is no hook</h3>
+    <p>
+        In most case <a class="link" href="/download/ITHVNR.zip">ITHVNR</a> should handle most VNs.
+        But in cases when it cannot you can try to ask on <a class="link" href="http://www.hongfire.com/forum/forum/hentai-lair/hentai-game-discussion/tools-and-tutorials/15208-agth-text-extraction-tool-for-games-translation/page771">Hongfire</a>.
+    <p>
+</article>
+{% endblock %}

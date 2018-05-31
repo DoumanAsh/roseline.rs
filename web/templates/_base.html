@@ -10,11 +10,14 @@
         {% block head %}{% endblock %}
     </head>
     <body>
-        <nav class="c-nav c-nav--inline">
+        <nav class="c-nav c-nav--inline topbar">
             <a class="c-nav__item" href="/">AGTH Hooks</a>
             <a class="c-nav__item" href="/vndb">VNDB</a>
-            <a class="c-nav__item c-nav__item--right" href="/dump.db">Database Dump</a>
+            <a class="c-nav__item" href="/about">About</a>
+            <a class="c-nav__item c-nav__item--right" href="/download/dump.db">Database Dump</a>
         </nav>
-        {% block content %}{% endblock %}
+        <div class="main">
+            {% block content %}{% endblock %}
+        </div>
     </body>
 </html>

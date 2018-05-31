@@ -19,26 +19,10 @@ use std::net;
 mod templates;
 mod server;
 
-fn run() -> Result<i32, String> {
+fn main() {
     utils::ssl::init();
     let _log_guard = log::init();
 
     server::start();
-
-    Ok(0)
-}
-
-fn main() {
-    use std::process::exit;
-
-    let code: i32 = match run() {
-        Ok(res) => res,
-        Err(error) => {
-            eprintln!("{}", error);
-            1
-        }
-    };
-
-    exit(code);
 }
 

@@ -1,6 +1,7 @@
 "use strict"
 
 import 'blaze/dist/generics.global.min.css'
+import 'blaze/dist/objects.containers.min.css'
 import 'blaze/dist/components.buttons.min.css'
 import 'blaze/dist/components.alerts.min.css'
 import 'blaze/dist/components.inputs.min.css'

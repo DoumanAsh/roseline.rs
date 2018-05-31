@@ -228,9 +228,10 @@ fn remove_hook_del(query: Form<AddHook>, state: State<AppState>) -> FutureHttpRe
 fn db_dump(_: HttpRequest<AppState>) -> actix_web::Either<actix_web::fs::NamedFile, templates::InternalError<io::Error>> {
     extern crate db;
     use self::actix_web::fs::NamedFile;
+    use self::actix_web::http::ContentEncoding;
 
     match NamedFile::open(db::PATH) {
-        Ok(file) => actix_web::Either::A(file),
+        Ok(file) => actix_web::Either::A(file.set_content_encoding(ContentEncoding::Auto)),
         Err(error) => {
             error!("Unable to open DB: {}. Error: {}", db::PATH, error);
             actix_web::Either::B(templates::InternalError::new(error))
@@ -264,12 +265,7 @@ fn application(state: AppState) -> App<AppState> {
                           .resource("/favicon.png", |res| {
                               res.method(Method::GET).f(statics::favicon);
                               res.route().f(not_allowed);
-                          })
-                          .resource("/dump.db", |res| {
-                              res.method(Method::GET).f(db_dump);
-                              res.route().f(not_allowed);
-                          })
-                          .resource("/search", |res| {
+                          }).resource("/search", |res| {
                               res.method(Method::GET).with2(search);
                               res.route().f(not_allowed);
                           })
@@ -290,6 +286,19 @@ fn application(state: AppState) -> App<AppState> {
                           .resource("/vn/{id:[0-9]+}", |res| {
                               res.method(Method::GET).with2(vn);
                               res.route().f(not_allowed);
+                          }).resource("/about", |res| {
+                              res.method(Method::GET).h(templates::About::new());
+                              res.route().f(not_allowed);
+                          }).scope("/download", |scope| {
+                              scope.resource("/ITHVNR.zip", |res| {
+                                  res.method(Method::GET).f(statics::ith_vnr);
+                                  res.route().f(not_allowed);
+                              }).resource("/dump.db", |res| {
+                                  res.method(Method::GET).f(db_dump);
+                                  res.route().f(not_allowed);
+                              }).default_resource(|res| {
+                                  res.route().h(templates::NotFound::new());
+                              })
                           }).default_resource(|res| {
                               res.route().h(templates::NotFound::new());
                           })
@@ -314,6 +323,7 @@ pub fn start() {
     };
     HttpServer::new(move || application(state.clone())).bind(addr).expect("To bind HttpServer")
                                                        .workers(cpu_num)
+                                                       .shutdown_timeout(5)
                                                        .start();
 
     let _ = system.run();

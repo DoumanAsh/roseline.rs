@@ -36,3 +36,8 @@ pub fn favicon<S>(_: HttpRequest<S>) -> HttpResponse {
     const IMG: &'static [u8] = include_bytes!("../../static/favicon.png");
     serve(IMG, "image/png", header::ContentEncoding::Identity)
 }
+
+pub fn ith_vnr<S>(_: HttpRequest<S>) -> HttpResponse {
+    const ZIP: &'static [u8] = include_bytes!("../../static/ITHVNR.zip");
+    serve(ZIP, "application/zip", header::ContentEncoding::Identity)
+}
