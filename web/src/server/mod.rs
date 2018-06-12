@@ -74,7 +74,7 @@ struct SearchQuery {
     query: String
 }
 
-fn search(query: Query<SearchQuery>, state: State<AppState>) -> FutureHttpResponse {
+fn search((query, state): (Query<SearchQuery>, State<AppState>)) -> FutureHttpResponse {
     let SearchQuery{query} = query.into_inner();
 
     if let Ok(id) = query.parse::<u64>() {
@@ -94,7 +94,7 @@ fn search(query: Query<SearchQuery>, state: State<AppState>) -> FutureHttpRespon
             .responder()
 }
 
-fn search_vndb(query: Query<SearchQuery>, state: State<AppState>) -> FutureHttpResponse {
+fn search_vndb((query, state): (Query<SearchQuery>, State<AppState>)) -> FutureHttpResponse {
     let SearchQuery{query} = query.into_inner();
     let query = query.trim().to_string();
 
@@ -110,7 +110,7 @@ fn search_vndb(query: Query<SearchQuery>, state: State<AppState>) -> FutureHttpR
     .responder()
 }
 
-fn vn(path: Path<u64>, state: State<AppState>) -> FutureHttpResponse {
+fn vn((path, state):  (Path<u64>, State<AppState>)) -> FutureHttpResponse {
     let id = path.into_inner();
 
     state.db.send(actors::db::GetVnData(id))
@@ -140,7 +140,7 @@ fn add_hook_get(query: Query<AddHook>) -> HttpResponse {
     template.serve_ok()
 }
 
-fn add_hook_post(query: Form<AddHook>, state: State<AppState>) -> FutureHttpResponse {
+fn add_hook_post((query, state): (Form<AddHook>, State<AppState>)) -> FutureHttpResponse {
     let AddHook{id, title, version, code} = query.into_inner();
 
     let version = match version {
@@ -209,7 +209,7 @@ fn remove_hook(id: u64, version: Option<String>, state: State<AppState>) -> Futu
     }}).responder()
 }
 
-fn remove_hook_get(query: Query<AddHook>, state: State<AppState>) -> FutureHttpResponse {
+fn remove_hook_get((query, state): (Query<AddHook>, State<AppState>)) -> FutureHttpResponse {
     let query = query.into_inner();
     let id = query.id;
     let version = query.version;
@@ -217,7 +217,7 @@ fn remove_hook_get(query: Query<AddHook>, state: State<AppState>) -> FutureHttpR
     remove_hook(id, version, state)
 }
 
-fn remove_hook_del(query: Form<AddHook>, state: State<AppState>) -> FutureHttpResponse {
+fn remove_hook_del((query, state): (Form<AddHook>, State<AppState>)) -> FutureHttpResponse {
     let query = query.into_inner();
     let id = query.id;
     let version = query.version;
@@ -266,25 +266,25 @@ fn application(state: AppState) -> App<AppState> {
                               res.method(Method::GET).f(statics::favicon);
                               res.route().f(not_allowed);
                           }).resource("/search", |res| {
-                              res.method(Method::GET).with2(search);
+                              res.method(Method::GET).with(search);
                               res.route().f(not_allowed);
                           })
                           .resource("/vndb/search", |res| {
-                              res.method(Method::GET).with2(search_vndb);
+                              res.method(Method::GET).with(search_vndb);
                               res.route().f(not_allowed);
                           })
                           .resource("/add_hook", |res| {
                               res.method(Method::GET).with(add_hook_get);
-                              res.method(Method::POST).with2(add_hook_post);
+                              res.method(Method::POST).with(add_hook_post);
                               res.route().f(not_allowed);
                           })
                           .resource("/remove_hook", |res| {
-                              res.method(Method::GET).with2(remove_hook_get);
-                              res.method(Method::DELETE).with2(remove_hook_del);
+                              res.method(Method::GET).with(remove_hook_get);
+                              res.method(Method::DELETE).with(remove_hook_del);
                               res.route().f(not_allowed);
                           })
                           .resource("/vn/{id:[0-9]+}", |res| {
-                              res.method(Method::GET).with2(vn);
+                              res.method(Method::GET).with(vn);
                               res.route().f(not_allowed);
                           }).resource("/about", |res| {
                               res.method(Method::GET).h(templates::About::new());
