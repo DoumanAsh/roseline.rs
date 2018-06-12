@@ -16,12 +16,12 @@ futures = "0.1"
 
 slog-scope = "4"
 
-vndb = "0"
-
-native-tls = "0"
-trust-dns-resolver = "0"
-
 actix = "0"
+
+[dependencies.vndb]
+version = "0.5"
+default-features = false
+features = ["tokio-client"]
 
 [dependencies.log]
 version = "0"

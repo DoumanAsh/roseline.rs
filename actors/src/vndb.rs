@@ -1,98 +1,82 @@
 extern crate futures;
-extern crate tokio_core;
-extern crate tokio_io;
-extern crate tokio_tls;
-extern crate native_tls;
 extern crate actix;
 extern crate vndb;
 
 use self::futures::Future;
 use self::futures::unsync::oneshot;
-use self::native_tls::{TlsConnector};
-use self::tokio_tls::{TlsConnectorExt, TlsStream};
-use self::tokio_core::net::TcpStream;
-use self::tokio_io::{AsyncRead};
-use self::tokio_io::codec::{FramedRead};
-use self::tokio_io::io::{WriteHalf};
 use self::actix::prelude::*;
-use self::actix::fut::FutureResult;
-use self::actix::io::{FramedWrite, WriteHandler};
-pub use self::vndb::protocol;
+pub use self::vndb::{protocol, client};
 
 use ::collections::VecDeque;
 use ::time;
 use ::io;
 
-type TlsFramedWrite = WriteHalf<TlsStream<TcpStream>>;
-
 pub struct Vndb {
-    framed: Option<actix::io::FramedWrite<TlsFramedWrite, protocol::Codec>>,
-    queue: VecDeque<oneshot::Sender<io::Result<protocol::message::Response>>>
+    sender: Option<client::tokio::ClientSender>,
+    queue: VecDeque<oneshot::Sender<io::Result<protocol::message::Response>>>,
+    //Controls restart delay
+    //In case of constant failures it
+    //increases with each restart.
+    timeout: u64
 }
 
 impl Vndb {
     pub fn new() -> Self {
         Self {
-            framed: None,
-            queue: VecDeque::with_capacity(10)
+            sender: None,
+            queue: VecDeque::with_capacity(10),
+            timeout: 0
         }
     }
-}
 
-impl WriteHandler<io::Error> for Vndb {}
+    #[inline]
+    fn reset_timeout(&mut self) {
+        self.timeout = 0;
+    }
+
+    //Schedules to restart self
+    fn restart_later(&mut self, ctx: &mut Context<Self>) {
+        const TIMEOUT_INTERVAL: u64 = 1_000;
+        const TIMEOUT_MAX: u64 = 5_000;
+        if self.timeout < TIMEOUT_MAX {
+            self.timeout += TIMEOUT_INTERVAL;
+        }
+
+        ctx.run_later(time::Duration::new(self.timeout, 0), |_, ctx| ctx.stop());
+    }
+}
 
 impl Actor for Vndb {
     type Context = Context<Self>;
 
     fn started(&mut self, ctx: &mut Context<Self>) {
-        use self::actix::actors::{Connector, Connect};
-
-        const API_DOMAIN: &'static str = "api.vndb.org";
-        const API_PORT: u16 = 19535;
-        const TIMEOUT: u64 = 1000;
-
-        let tls_ctx = match TlsConnector::builder() {
-            Ok(builder) => match builder.build() {
-                Ok(ctx) => ctx,
-                Err(error) => {
-                    error!("Unable to create TLS context. Error: {}", error);
-                    ctx.run_later(time::Duration::new(TIMEOUT, 0), |_, ctx| ctx.stop());
-                    return
-                }
-            },
+        let vndb = match client::tokio::Client::new() {
+            Ok(vndb) => vndb,
             Err(error) => {
-                error!("Unable to create TLS builder. Error: {}", error);
-                ctx.run_later(time::Duration::new(TIMEOUT, 0), |_, ctx| ctx.stop());
+                error!("VNDB: Failed to create Client. Error: {}", error);
+                self.restart_later(ctx);
                 return
             }
         };
 
-        let connector = Arbiter::registry().get::<Connector>();
+        vndb.into_actor(self).map_err(|error, act, ctx| {
+            error!("VNDB: Unable to connect. Error: {}", error);
+            act.restart_later(ctx);
+        }).map(|client, act, ctx| {
+            info!("VNDB: Connected.");
+            let (sink, stream) = client.into_parts();
 
-        connector.send(Connect::host_and_port(API_DOMAIN, API_PORT)).into_actor(self).map_err(|error, _act, ctx| {
-            error!("VNDB: Unable to send connect. Error: {}", error);
-            ctx.run_later(time::Duration::new(TIMEOUT, 0), |_, ctx| ctx.stop());
-        }).and_then(|connect_result, _act, ctx| {
-            FutureResult::from(connect_result.map_err(move |error| {
-                error!("VNDB: Unable to connect. Error: {}", error);
-                ctx.run_later(time::Duration::new(TIMEOUT, 0), |_, ctx| ctx.stop());
-            }))
-        }).and_then(move |socket, act, _ctx| {
-            info!("VNDB: Connected over TCP.");
-            tls_ctx.connect_async(API_DOMAIN, socket).into_actor(act).map_err(|error, _act, ctx| {
-                error!("VNDB: Unable to perform TLS handshake. Error: {}", error);
-                ctx.run_later(time::Duration::new(TIMEOUT, 0), |_, ctx| ctx.stop());
-            })
-        }).map(|socket, act, ctx| {
-            info!("VNDB: Connected over TLS.");
-            let (read, write) = socket.split();
+            match sink.request(protocol::message::request::Login::new(None, None)) {
+                Ok(_) => info!("VNDB: Sent Login message"),
+                Err(error) => {
+                    warn!("VNDB: Unable to send login message. Error: {}", error);
+                    return act.restart_later(ctx);
+                }
+            }
+            ctx.add_stream(stream);
 
-            ctx.add_stream(FramedRead::new(read, protocol::Codec));
-
-            let mut framed = FramedWrite::new(write, protocol::Codec, ctx);
-            framed.write(protocol::message::request::Login::new(None, None).into());
-
-            act.framed = Some(framed);
+            act.sender = Some(sink);
+            act.reset_timeout();
         }).wait(ctx);
     }
 }
@@ -100,7 +84,7 @@ impl Actor for Vndb {
 impl Supervised for Vndb {
     fn restarting(&mut self, _: &mut Self::Context) {
         info!("VNDB: Restarting...");
-        self.framed.take();
+        self.sender.take();
         for tx in self.queue.drain(..) {
             let _ = tx.send(Err(io::Error::new(io::ErrorKind::ConnectionAborted, "Restart")));
         }
@@ -116,8 +100,8 @@ impl StreamHandler<protocol::message::Response, io::Error> for Vndb {
     fn error(&mut self, error: io::Error, ctx: &mut Self::Context) -> Running {
         warn!("VNDB: IO error: {}", error);
 
-        if let Some(tx) = self.queue.pop_front() {
-            let _ = tx.send(Err(error));
+        for tx in self.queue.drain(..) {
+            let _ = tx.send(Err(io::Error::new(io::ErrorKind::ConnectionAborted, "Restart")));
         }
 
         ctx.stop();
@@ -134,7 +118,7 @@ impl StreamHandler<protocol::message::Response, io::Error> for Vndb {
             None => {
                 match msg {
                     //As we only use Get methods, OK can be received on login only.
-                    protocol::message::Response::Ok => (),
+                    protocol::message::Response::Ok => info!("VNDB: Login complete"),
                     msg => warn!("Received message while there was no request. Message={:?}", msg)
                 }
             }
@@ -216,15 +200,19 @@ impl Message for Request {
 impl Handler<Request> for Vndb {
     type Result = ResponseFuture<protocol::message::Response, io::Error>;
 
-    fn handle(&mut self, msg: Request, _: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: Request, ctx: &mut Self::Context) -> Self::Result {
         trace!("VNDB: send {}", &msg.0);
 
         let (tx, rx) = oneshot::channel();
-        if let Some(ref mut framed) = self.framed {
-            self.queue.push_back(tx);
-            framed.write(msg.0.into());
-        } else {
-            let _ = tx.send(Err(io::Error::new(io::ErrorKind::NotConnected, "Disconnected")));
+        let send = self.sender.as_mut().and_then(|sender| sender.request(msg.0).ok());
+        match send {
+            Some(_) => self.queue.push_back(tx),
+            None => {
+                //In unlikely case sender invalidation
+                //we should restart Actor, but we still need to response
+                let _ = tx.send(Err(io::Error::new(io::ErrorKind::NotConnected, "Disconnected")));
+                ctx.stop();
+            }
         }
 
         Box::new(rx.map_err(|_| io::Error::new(io::ErrorKind::ConnectionAborted, "Restart"))
