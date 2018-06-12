@@ -22,8 +22,12 @@ regex = "0"
 
 slog-scope = "4"
 
-serenity = "0"
 typemap = "0"
+
+[dependencies.serenity]
+default-features = false
+features = ["cache", "framework", "gateway", "standard_framework"]
+version = "0.5"
 
 [dependencies.irc]
 version = "0.13"
