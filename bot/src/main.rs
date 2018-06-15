@@ -1,7 +1,5 @@
-#[macro_use(slog_info, slog_error, slog_warn, slog_log, slog_record, slog_debug, slog_trace, slog_record_static, slog_b, slog_kv)]
-extern crate slog;
 #[macro_use]
-extern crate slog_scope;
+extern crate log;
 #[macro_use]
 extern crate lazy_static;
 
@@ -9,8 +7,6 @@ extern crate actix;
 
 extern crate utils;
 extern crate actors;
-
-use utils::log;
 
 use actix::{Supervisor, Actor};
 
@@ -26,7 +22,7 @@ mod discord;
 
 fn run() -> Result<i32, String> {
     utils::ssl::init();
-    let _log_guard = log::init();
+    let _log_guard = utils::log::init();
 
     let config = config::load()?;
     let system = actix::System::new("roseline");

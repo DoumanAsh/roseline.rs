@@ -14,8 +14,6 @@ tokio-io = "0.1"
 tokio-tls = "0.1"
 futures = "0.1"
 
-slog-scope = "4"
-
 actix = "0"
 
 [dependencies.vndb]
@@ -26,9 +24,3 @@ features = ["tokio-client"]
 [dependencies.log]
 version = "0"
 default-features = false
-features = ["max_level_info", "release_max_level_warn"]
-
-[dependencies.slog]
-version = "2"
-default-features = false
-features = ["max_level_trace", "release_max_level_info"]

@@ -1,5 +1,3 @@
-#[macro_use(slog_o, slog_kv)]
-extern crate slog;
 #[macro_use(set_panic_message)]
 extern crate lazy_panic;
 

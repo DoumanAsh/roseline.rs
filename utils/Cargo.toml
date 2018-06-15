@@ -6,11 +6,7 @@ license = "Apache-2.0"
 readme = "README.md"
 
 [dependencies]
-slog-scope = "4"
-slog-async = "2"
-slog-term = "2"
-slog-stdlog = "3"
-slog = "2"
+cute-log = "1"
 lazy-panic = "0.3"
 
 [target."cfg(all(unix, not(target_os = \"macos\")))".dependencies]

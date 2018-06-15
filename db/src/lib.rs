@@ -1,9 +1,7 @@
 #[macro_use]
 extern crate diesel;
-#[macro_use(slog_info, slog_debug, slog_log, slog_record, slog_record_static, slog_b, slog_kv)]
-extern crate slog;
 #[macro_use]
-extern crate slog_scope;
+extern crate log;
 
 extern crate utils;
 

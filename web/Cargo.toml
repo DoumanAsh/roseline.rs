@@ -22,8 +22,6 @@ askama = "0"
 [dependencies]
 futures = "0.1"
 
-slog-scope = "4"
-
 mime = "0.3"
 num_cpus = "1"
 
@@ -46,9 +44,4 @@ features = ["flate2-c", "brotli"]
 [dependencies.log]
 version = "0"
 default-features = false
-features = ["max_level_info", "release_max_level_warn"]
-
-[dependencies.slog]
-version = "2"
-default-features = false
-features = ["max_level_trace", "release_max_level_info"]
+features = ["max_level_info", "release_max_level_info"]
