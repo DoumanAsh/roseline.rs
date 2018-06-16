@@ -240,8 +240,8 @@ fn db_dump(_: HttpRequest<AppState>) -> actix_web::Either<actix_web::fs::NamedFi
 }
 
 fn application(state: AppState) -> App<AppState> {
-    App::with_state(state).middleware(middleware::Logger::default())
-                          .middleware(middleware::DefaultHeaders)
+    App::with_state(state).middleware(middleware::DefaultHeaders)
+                          .middleware(middleware::Logger)
                           .resource("/", |res| {
                               res.method(Method::GET).h(templates::Index::new("/search", "Search AGTH Hook"));
                               res.route().f(not_allowed);
