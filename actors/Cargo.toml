@@ -14,7 +14,7 @@ tokio-io = "0.1"
 tokio-tls = "0.1"
 futures = "0.1"
 
-actix = "0"
+actix = "0.5"
 
 [dependencies.vndb]
 version = "0.5"

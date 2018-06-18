@@ -22,7 +22,7 @@ use self::actix_web::{
     State,
     Path,
     Query,
-    Form
+    Form,
 };
 use self::actix_web::server::HttpServer;
 use self::actix_web::http::{
