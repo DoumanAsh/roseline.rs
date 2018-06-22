@@ -21,7 +21,7 @@ use ::command;
 
 struct CommandHandler;
 impl typemap::Key for CommandHandler {
-    type Value = actix::Addr<actix::Syn, actors::exec::Executor>;
+    type Value = actix::Addr<actors::exec::Executor>;
 }
 
 struct Handler;
@@ -39,7 +39,7 @@ impl EventHandler for Handler {
     }
 }
 
-pub fn client(executor: actix::Addr<actix::Syn, actors::exec::Executor>) -> Client {
+pub fn client(executor: actix::Addr<actors::exec::Executor>) -> Client {
     let token = include_str!("../discord.token");
     // Login with a bot token from the environment
     let mut client = Client::new(token, Handler).expect("Error creating client");

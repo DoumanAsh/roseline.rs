@@ -37,12 +37,12 @@ fn parse_vndb_ref(text: &str) -> Option<(VndbRequestType, u64)> {
 ///Performs execution of various commands
 ///that involves VNDB or DB
 pub struct Executor {
-    pub vndb: Addr<Unsync, vndb::Vndb>,
-    pub db: Addr<Syn, db::Db>,
+    pub vndb: Addr<vndb::Vndb>,
+    pub db: Addr<db::Db>,
 }
 
 impl Executor {
-    pub fn new(vndb: Addr<Unsync, vndb::Vndb>, db: Addr<Syn, db::Db>) -> Self {
+    pub fn new(vndb: Addr<vndb::Vndb>, db: Addr<db::Db>) -> Self {
         Self {
             vndb,
             db
@@ -51,8 +51,8 @@ impl Executor {
 
     ///Starts Executor with default vndb and db actors
     pub fn default_threads(threads: usize) -> Self {
-        let db: Addr<Syn, _> = db::Db::start_threaded(threads);
-        let vndb: Addr<Unsync, _> = Supervisor::start(|_| vndb::Vndb::new());
+        let db: Addr<_> = db::Db::start_threaded(threads);
+        let vndb: Addr<_> = Supervisor::start(|_| vndb::Vndb::new());
 
         Self {
             vndb,
@@ -637,16 +637,16 @@ impl Handler<GetVndbObject> for Executor {
     }
 }
 
-type OngoingVndbRequest = actix::dev::Request<Unsync, vndb::Vndb, vndb::Request>;
+type OngoingVndbRequest = actix::dev::Request<vndb::Vndb, vndb::Request>;
 pub struct SearchVnFutureResult {
     page: u32,
     title: String,
     result: Option<Vec<vndb::response::results::Vn>>,
-    vndb: Addr<Unsync, vndb::Vndb>,
+    vndb: Addr<vndb::Vndb>,
 }
 
 impl SearchVnFutureResult {
-    fn new(title: String, vndb: Addr<Unsync, vndb::Vndb>) -> Self {
+    fn new(title: String, vndb: Addr<vndb::Vndb>) -> Self {
         Self {
             page: 1,
             title,

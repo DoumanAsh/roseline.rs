@@ -31,13 +31,13 @@ vndb = "0"
 
 http = "0"
 bytes = "0"
-actix = "0.5"
+actix = { git="https://github.com/actix/actix.git" }
 
 serde = "1.0"
 serde_derive = "1.0"
 
 [dependencies.actix-web]
-version = "0.6"
+git = "https://github.com/actix/actix-web"
 default-features = false
 features = ["flate2-c", "brotli"]
 

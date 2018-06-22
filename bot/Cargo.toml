@@ -12,9 +12,10 @@ path = "../actors"
 path = "../utils"
 
 [dependencies]
+tokio = "0"
 vndb = "0"
 
-actix = "0.5"
+actix = { git="https://github.com/actix/actix.git" }
 futures = "0.1"
 
 lazy_static = "1"
@@ -28,7 +29,9 @@ features = ["cache", "framework", "gateway", "standard_framework"]
 version = "0.5"
 
 [dependencies.irc]
-version = "0.13"
+# TODO: wait for stable version
+git = "https://github.com/aatxe/irc"
+branch = "0.14"
 default-features = false
 features = ["ctcp", "toml"]
 

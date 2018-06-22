@@ -20,7 +20,7 @@ impl Db {
         }
     }
 
-    pub fn start_threaded(threads: usize) -> Addr<Syn, Self> {
+    pub fn start_threaded(threads: usize) -> Addr<Self> {
         SyncArbiter::start(threads, || Self::new())
     }
 }

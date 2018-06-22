@@ -11,9 +11,7 @@ use self::futures::{
 use self::actix::prelude::*;
 use self::irc::client::{
     Client,
-    IrcClient,
-    PackedIrcClient,
-    IrcClientFuture
+    IrcClient
 };
 use self::irc::proto::command::Command;
 use self::irc::proto::message::Message as InnerIrcMessage;
@@ -38,13 +36,13 @@ macro_rules! try_option {
 
 pub struct Irc {
     config: Config,
-    handler: Addr<actix::Syn, actors::exec::Executor>,
+    handler: Addr<actors::exec::Executor>,
     client: Option<IrcClient>,
     ignores: HashSet<String>
 }
 
 impl Irc {
-    pub fn new(config: Config, handler: Addr<Syn, actors::exec::Executor>) -> Self {
+    pub fn new(config: Config, handler: Addr<actors::exec::Executor>) -> Self {
         let mut ignores = HashSet::new();
         ignores.insert("Fltrsh".to_string());
 
@@ -64,20 +62,20 @@ impl Message for IrcMessage {
     type Result = Result<(), IrcError>;
 }
 
-impl StreamHandler<IrcMessage, IrcError> for Irc {
-    fn finished(&mut self, ctx: &mut Self::Context) {
-        warn!("IRC: Connection is closed");
-        ctx.stop();
-    }
-
-    fn error(&mut self, error: IrcError, ctx: &mut Self::Context) -> Running {
-        warn!("IRC: Reading IO error: {}", error);
-        ctx.stop();
-        Running::Stop
-    }
-
-    fn handle(&mut self, msg: IrcMessage, ctx: &mut Self::Context) {
-        trace!("IRC: message={:?}", msg);
+impl StreamHandler2<IrcMessage, IrcError> for Irc {
+    fn handle(&mut self, msg: Result<Option<IrcMessage>, IrcError>, ctx: &mut Self::Context) {
+        let msg = match msg {
+            Ok(Some(msg)) => msg,
+            Ok(None) => {
+                warn!("IRC: Connection is closed");
+                return ctx.stop();
+            },
+            Err(error) => {
+                warn!("IRC: Reading IO error: {}", error);
+                return ctx.stop();
+            }
+        };
+        debug!("IRC: message={:?}", msg);
 
         let msg = msg.0;
         let from = msg.prefix.as_ref().map(|prefix| &prefix[..prefix.find('!').unwrap_or(0)]);
@@ -98,7 +96,7 @@ impl StreamHandler<IrcMessage, IrcError> for Irc {
                     None => return
                 };
 
-                let is_pm = client.current_nickname() == target;
+                let is_pm = *client.current_nickname() == target;
 
                 match cmd {
                     command::Command::Text(text) => ctx.notify(TextResponse::new(target, from, is_pm, text)),
@@ -137,8 +135,7 @@ impl StreamHandler<IrcMessage, IrcError> for Irc {
                         }
                     },
                     command::Command::Shutdown => {
-                        ctx.notify(actix::msgs::SystemExit(0));
-                        Arbiter::system().do_send(actix::msgs::SystemExit(0));
+                        ctx.notify(StopSystem);
                     },
                 }
             },
@@ -146,7 +143,7 @@ impl StreamHandler<IrcMessage, IrcError> for Irc {
             Command::PART(chanlist, _) => debug!("{:?} left {}", from, chanlist),
             Command::KICK(chanlist, user, _) => {
                 debug!("{:?} kicked {} out of {}", from, user, chanlist);
-                if user == client.current_nickname() {
+                if user == *client.current_nickname() {
                     ctx.run_later(duration::ms(500), move |act, ctx| {
                         match act.client.as_ref().unwrap().send_join(&chanlist) {
                             Ok(_) => (),
@@ -359,10 +356,15 @@ impl Handler<GetRefResponse> for Irc {
     }
 }
 
-impl Handler<actix::msgs::SystemExit> for Irc {
-    type Result = <actix::msgs::SystemExit as Message>::Result;
+pub struct StopSystem;
+impl Message for StopSystem {
+    type Result = ();
+}
 
-    fn handle(&mut self, _msg: actix::msgs::SystemExit, _ctx: &mut Self::Context) -> Self::Result {
+impl Handler<StopSystem> for Irc {
+    type Result = ();
+
+    fn handle(&mut self, _msg: StopSystem, _ctx: &mut Self::Context) -> Self::Result {
         warn!("Shutdown command is issued!");
 
         let client = self.client.as_ref().unwrap();
@@ -373,6 +375,8 @@ impl Handler<actix::msgs::SystemExit> for Irc {
                 let _ = client.send_part(&chanlist.join(","));
             }
         };
+
+        System::current().stop();
     }
 }
 
@@ -388,36 +392,29 @@ impl Actor for Irc {
 
     fn started(&mut self, ctx: &mut Context<Self>) {
         const TIMEOUT_MS: u64 = 1500;
+        info!("IRC: starting");
 
-        let future: IrcClientFuture<'static> = match IrcClient::new_future(Arbiter::handle().clone(), &self.config) {
-            Ok(result) => unsafe { ::mem::transmute(result) },
-            Err(error) => {
-                error!("IRC: Unable to create new client. Error: {}", error);
-                ctx.run_later(duration::ms(TIMEOUT_MS), |_, ctx| ctx.stop());
-                return;
-            }
-        };
-
-        future.into_actor(self).map_err(|error, _act, ctx| {
+        let irc = IrcClient::new_future(self.config.clone()).into_actor(self).map_err(|error, _act, ctx| {
             error!("IRC: Unable to connect to server. Error: {}", error);
             ctx.run_later(duration::ms(TIMEOUT_MS), |_, ctx| ctx.stop());
-        }).map(|packed, act, ctx| {
+        }).map(|(client, future), act, ctx| {
             info!("IRC: Connected");
-            let PackedIrcClient(client, future) = packed;
-
             let future = future.into_actor(act).map_err(|error, _act, ctx| {
                 error!("IRC: Runtime error: {}", error);
                 ctx.stop();
             });
             ctx.spawn(future);
 
-            info!("IRC: Started");
             client.send_cap_req(&[irc::proto::caps::Capability::MultiPrefix]).expect("To send caps");
             client.identify().expect("To identify");
 
             let stream = client.stream().map(|msg| IrcMessage(msg));
-            ctx.add_stream(stream);
+            Self::add_stream(stream, ctx);
+
+            info!("IRC: Joined");
             act.client = Some(client);
-        }).wait(ctx);
+        });
+
+        ctx.spawn(irc);
     }
 }

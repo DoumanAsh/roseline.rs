@@ -51,8 +51,8 @@ type FutureHttpResponse = Box<Future<Item=HttpResponse, Error=HttpError>>;
 
 #[derive(Clone)]
 struct AppState {
-    pub executor: self::actix::Addr<actix::Syn, actors::exec::Executor>,
-    pub db: self::actix::Addr<actix::Syn, actors::db::Db>,
+    pub executor: self::actix::Addr<actors::exec::Executor>,
+    pub db: self::actix::Addr<actors::db::Db>,
 }
 
 fn not_allowed<S>(_: HttpRequest<S>) -> HttpResponse {

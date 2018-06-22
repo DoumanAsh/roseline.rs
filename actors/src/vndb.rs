@@ -73,7 +73,7 @@ impl Actor for Vndb {
                     return act.restart_later(ctx);
                 }
             }
-            ctx.add_stream(stream);
+            Self::add_stream(stream, ctx);
 
             act.sender = Some(sink);
             act.reset_timeout();
@@ -91,25 +91,21 @@ impl Supervised for Vndb {
     }
 }
 
-impl StreamHandler<protocol::message::Response, io::Error> for Vndb {
-    fn finished(&mut self, ctx: &mut Self::Context) {
-        warn!("VNDB: Connection is closed");
-        ctx.stop();
-    }
+impl StreamHandler2<protocol::message::Response, io::Error> for Vndb {
+    fn handle(&mut self, msg: Result<Option<protocol::message::Response>, io::Error>, ctx: &mut Self::Context) {
+        let msg = match msg {
+            Ok(Some(msg)) => msg,
+            Ok(None) => {
+                warn!("VNDB: Connection is closed");
+                return ctx.stop();
+            },
+            Err(error) => {
+                warn!("VNDB: IO error: {}", error);
+                return ctx.stop();
 
-    fn error(&mut self, error: io::Error, ctx: &mut Self::Context) -> Running {
-        warn!("VNDB: IO error: {}", error);
+            }
+        };
 
-        for tx in self.queue.drain(..) {
-            let _ = tx.send(Err(io::Error::new(io::ErrorKind::ConnectionAborted, "Restart")));
-        }
-
-        ctx.stop();
-
-        Running::Stop
-    }
-
-    fn handle(&mut self, msg: protocol::message::Response, _: &mut Self::Context) {
         trace!("VNDB: receives {:?}", msg);
         match self.queue.pop_front() {
             Some(tx) => {

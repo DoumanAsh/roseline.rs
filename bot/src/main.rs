@@ -13,7 +13,6 @@ use actix::{Supervisor, Actor};
 use std::collections;
 use std::thread;
 use std::fmt;
-use std::mem;
 
 mod config;
 mod command;
@@ -27,9 +26,9 @@ fn run() -> Result<i32, String> {
     let config = config::load()?;
     let system = actix::System::new("roseline");
 
-    let executor: actix::Addr<actix::Syn, _> = actors::exec::Executor::default_threads(2).start();
+    let executor: actix::Addr<_> = actors::exec::Executor::default_threads(2).start();
     let executor2 = executor.clone();
-    let _irc: actix::Addr<actix::Unsync, _> = Supervisor::start(move |_| irc::Irc::new(config, executor2));
+    let _irc: actix::Addr<_> = Supervisor::start(move |_| irc::Irc::new(config, executor2));
 
     thread::spawn(move || {
         loop {
