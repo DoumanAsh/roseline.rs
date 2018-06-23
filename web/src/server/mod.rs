@@ -225,13 +225,11 @@ fn remove_hook_del((query, state): (Form<AddHook>, State<AppState>)) -> FutureHt
     remove_hook(id, version, state)
 }
 
-fn db_dump(_: HttpRequest<AppState>) -> actix_web::Either<actix_web::fs::NamedFile, templates::InternalError<io::Error>> {
+fn db_dump(req: HttpRequest<AppState>) -> actix_web::Either<HttpResponse, templates::InternalError<io::Error>> {
     extern crate db;
-    use self::actix_web::fs::NamedFile;
-    use self::actix_web::http::ContentEncoding;
 
-    match NamedFile::open(db::PATH) {
-        Ok(file) => actix_web::Either::A(file.set_content_encoding(ContentEncoding::Auto)),
+    match statics::serve_file_save_as(db::PATH, &req) {
+        Ok(res) => actix_web::Either::A(res),
         Err(error) => {
             error!("Unable to open DB: {}. Error: {}", db::PATH, error);
             actix_web::Either::B(templates::InternalError::new(error))
@@ -293,7 +291,7 @@ fn application(state: AppState) -> App<AppState> {
                               scope.resource("/ITHVNR.zip", |res| {
                                   res.method(Method::GET).f(statics::ith_vnr);
                                   res.route().f(not_allowed);
-                              }).resource("/dump.db", |res| {
+                              }).resource("/roseline.db", |res| {
                                   res.method(Method::GET).f(db_dump);
                                   res.route().f(not_allowed);
                               }).default_resource(|res| {

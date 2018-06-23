@@ -29,8 +29,10 @@ askama = "0"
 
 vndb = "0"
 
+memmap = "0.6"
 http = "0"
 bytes = "0"
+etag = "1"
 actix = { git="https://github.com/actix/actix.git" }
 
 serde = "1.0"
