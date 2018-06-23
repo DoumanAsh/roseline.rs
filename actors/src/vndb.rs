@@ -59,7 +59,7 @@ impl Actor for Vndb {
             }
         };
 
-        vndb.into_actor(self).map_err(|error, act, ctx| {
+        let vndb = vndb.into_actor(self).map_err(|error, act, ctx| {
             error!("VNDB: Unable to connect. Error: {}", error);
             act.restart_later(ctx);
         }).map(|client, act, ctx| {
@@ -77,7 +77,9 @@ impl Actor for Vndb {
 
             act.sender = Some(sink);
             act.reset_timeout();
-        }).wait(ctx);
+        });
+
+        ctx.spawn(vndb);
     }
 }
 
