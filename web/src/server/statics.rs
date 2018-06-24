@@ -48,18 +48,22 @@ pub fn serve_file_save_as<P: AsRef<path::Path>, S>(path: P, req: &HttpRequest<S>
         return Ok(HttpResponse::NotModified().body(actix_web::Body::Empty));
     }
 
-    let mmap = unsafe { memmap::Mmap::map(&file)? };
 
     let content_dispotion = match path.file_name().and_then(|name| name.to_str()) {
         Some(file_name) => format!("attachment; filename=\"{}\"", file_name),
         None => "attachment".to_owned()
     };
 
+    let body = {
+        let mmap = unsafe { memmap::Mmap::map(&file)? };
+        actix_web::Binary::from_slice(&mmap[..])
+    };
+
     Ok(HttpResponse::Ok().content_type("application/octet-stream")
                          .content_encoding(header::ContentEncoding::Auto)
                          .header(header::CONTENT_DISPOSITION, content_dispotion)
                          .header(header::ETAG, file_etag.to_string())
-                         .body(actix_web::Body::Binary(mmap.to_vec().into())))
+                         .body(body).into())
 }
 
 ///Serves static files with max-age 1 week
