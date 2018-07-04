@@ -93,21 +93,18 @@ impl Supervised for Vndb {
     }
 }
 
-impl StreamHandler2<protocol::message::Response, io::Error> for Vndb {
-    fn handle(&mut self, msg: Result<Option<protocol::message::Response>, io::Error>, ctx: &mut Self::Context) {
-        let msg = match msg {
-            Ok(Some(msg)) => msg,
-            Ok(None) => {
-                warn!("VNDB: Connection is closed");
-                return ctx.stop();
-            },
-            Err(error) => {
-                warn!("VNDB: IO error: {}", error);
-                return ctx.stop();
+impl StreamHandler<protocol::message::Response, io::Error> for Vndb {
+    fn error(&mut self, error: io::Error, _ctx: &mut Self::Context) -> actix::Running {
+        warn!("VNDB: IO error: {}", error);
+        actix::Running::Stop
+    }
 
-            }
-        };
+    fn finished(&mut self, ctx: &mut Self::Context) {
+        warn!("VNDB: Connection is closed");
+        ctx.stop();
+    }
 
+    fn handle(&mut self, msg: protocol::message::Response, _ctx: &mut Self::Context) {
         trace!("VNDB: receives {:?}", msg);
         match self.queue.pop_front() {
             Some(tx) => {

@@ -10,7 +10,7 @@ use self::actix_web::middleware::{Middleware, Response, Started, Finished};
 pub struct DefaultHeaders;
 
 impl<S> Middleware<S> for DefaultHeaders {
-    fn response(&self, _: &mut HttpRequest<S>, mut resp: HttpResponse) -> Result<Response> {
+    fn response(&self, _: &HttpRequest<S>, mut resp: HttpResponse) -> Result<Response> {
         const DEFAULT_HEADERS: [(header::HeaderName, &'static str); 5] = [
             (header::SERVER, "Roseline"),
             (header::X_DNS_PREFETCH_CONTROL, "off"),
@@ -39,7 +39,7 @@ pub struct Logger;
 
 impl<S> Middleware<S> for Logger {
     #[allow(unused)]
-    fn start(&self, req: &mut HttpRequest<S>) -> Result<Started> {
+    fn start(&self, req: &HttpRequest<S>) -> Result<Started> {
         #[cfg(debug_assertions)]
         {
             use self::actix_web::HttpMessage;
@@ -59,7 +59,7 @@ impl<S> Middleware<S> for Logger {
     }
 
     #[allow(unused)]
-    fn finish(&self, _req: &mut HttpRequest<S>, resp: &HttpResponse) -> Finished {
+    fn finish(&self, _req: &HttpRequest<S>, resp: &HttpResponse) -> Finished {
         #[cfg(debug_assertions)]
         {
             use ::std::str;

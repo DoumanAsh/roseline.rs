@@ -74,27 +74,27 @@ pub fn serve<B: Into<Body>>(bytes: B, content_type: &str, encoding: header::Cont
                       .body(bytes.into())
 }
 
-pub fn app_bundle_css<S>(_: HttpRequest<S>) -> HttpResponse {
+pub fn app_bundle_css<S>(_: &HttpRequest<S>) -> HttpResponse {
     const CSS: &'static [u8] = include_bytes!("../../static/app.bundle.css");
     serve(CSS, "text/css; charset=utf-8", header::ContentEncoding::Auto)
 }
 
-pub fn app_bundle_js<S>(_: HttpRequest<S>) -> HttpResponse {
+pub fn app_bundle_js<S>(_: &HttpRequest<S>) -> HttpResponse {
     const JS: &'static [u8] = include_bytes!("../../static/app.bundle.js");
     serve(JS, "application/javascript; charset=utf-8", header::ContentEncoding::Auto)
 }
 
-pub fn roseline_png<S>(_: HttpRequest<S>) -> HttpResponse {
+pub fn roseline_png<S>(_: &HttpRequest<S>) -> HttpResponse {
     const IMG: &'static [u8] = include_bytes!("../../static/Roseline.png");
     serve(IMG, "image/png", header::ContentEncoding::Identity)
 }
 
-pub fn favicon<S>(_: HttpRequest<S>) -> HttpResponse {
+pub fn favicon<S>(_: &HttpRequest<S>) -> HttpResponse {
     const IMG: &'static [u8] = include_bytes!("../../static/favicon.png");
     serve(IMG, "image/png", header::ContentEncoding::Identity)
 }
 
-pub fn ith_vnr<S>(_: HttpRequest<S>) -> HttpResponse {
+pub fn ith_vnr<S>(_: &HttpRequest<S>) -> HttpResponse {
     const ZIP: &'static [u8] = include_bytes!("../../static/ITHVNR.zip");
     serve(ZIP, "application/zip", header::ContentEncoding::Identity)
 }

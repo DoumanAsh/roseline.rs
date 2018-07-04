@@ -55,7 +55,7 @@ struct AppState {
     pub db: self::actix::Addr<actors::db::Db>,
 }
 
-fn not_allowed<S>(_: HttpRequest<S>) -> HttpResponse {
+fn not_allowed<S>(_: &HttpRequest<S>) -> HttpResponse {
     HttpResponse::MethodNotAllowed().finish()
 }
 
@@ -225,7 +225,7 @@ fn remove_hook_del((query, state): (Form<AddHook>, State<AppState>)) -> FutureHt
     remove_hook(id, version, state)
 }
 
-fn db_dump(req: HttpRequest<AppState>) -> actix_web::Either<HttpResponse, templates::InternalError<io::Error>> {
+fn db_dump(req: &HttpRequest<AppState>) -> actix_web::Either<HttpResponse, templates::InternalError<io::Error>> {
     extern crate db;
 
     match statics::serve_file_save_as(db::PATH, &req) {

@@ -62,19 +62,18 @@ impl Message for IrcMessage {
     type Result = Result<(), IrcError>;
 }
 
-impl StreamHandler2<IrcMessage, IrcError> for Irc {
-    fn handle(&mut self, msg: Result<Option<IrcMessage>, IrcError>, ctx: &mut Self::Context) {
-        let msg = match msg {
-            Ok(Some(msg)) => msg,
-            Ok(None) => {
-                warn!("IRC: Connection is closed");
-                return ctx.stop();
-            },
-            Err(error) => {
-                warn!("IRC: Reading IO error: {}", error);
-                return ctx.stop();
-            }
-        };
+impl StreamHandler<IrcMessage, IrcError> for Irc {
+    fn error(&mut self, error: IrcError, _ctx: &mut Self::Context) -> actix::Running {
+        warn!("VNDB: IO error: {}", error);
+        actix::Running::Stop
+    }
+
+    fn finished(&mut self, ctx: &mut Self::Context) {
+        warn!("VNDB: Connection is closed");
+        ctx.stop();
+    }
+
+    fn handle(&mut self, msg: IrcMessage, ctx: &mut Self::Context) {
         debug!("IRC: message={:?}", msg);
 
         let msg = msg.0;

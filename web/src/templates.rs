@@ -51,7 +51,7 @@ impl Index {
 impl<S> Handler<S> for Index {
     type Result = HttpResponse;
 
-    fn handle(&self, _: HttpRequest<S>) -> Self::Result {
+    fn handle(&self, _: &HttpRequest<S>) -> Self::Result {
         self.serve_ok()
     }
 }
@@ -99,7 +99,7 @@ impl NotFound {
 impl<S> Handler<S> for NotFound {
     type Result = HttpResponse;
 
-    fn handle(&self, _: HttpRequest<S>) -> Self::Result {
+    fn handle(&self, _: &HttpRequest<S>) -> Self::Result {
         self.response()
     }
 }
@@ -219,7 +219,7 @@ impl About {
 impl<S> Handler<S> for About {
     type Result = HttpResponse;
 
-    fn handle(&self, _: HttpRequest<S>) -> Self::Result {
+    fn handle(&self, _: &HttpRequest<S>) -> Self::Result {
         self.serve_ok()
     }
 }
