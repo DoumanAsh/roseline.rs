@@ -64,12 +64,12 @@ impl Message for IrcMessage {
 
 impl StreamHandler<IrcMessage, IrcError> for Irc {
     fn error(&mut self, error: IrcError, _ctx: &mut Self::Context) -> actix::Running {
-        warn!("VNDB: IO error: {}", error);
+        warn!("IRC: IO error: {}", error);
         actix::Running::Stop
     }
 
     fn finished(&mut self, ctx: &mut Self::Context) {
-        warn!("VNDB: Connection is closed");
+        warn!("IRC: Connection is closed");
         ctx.stop();
     }
 
