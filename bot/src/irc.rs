@@ -368,12 +368,7 @@ impl Handler<StopSystem> for Irc {
 
         let client = self.client.as_ref().unwrap();
 
-        if let Some(chanlist) = client.list_channels() {
-            if chanlist.len() > 0 {
-                debug!("Leaving chanlist={:?}", &chanlist);
-                let _ = client.send_part(&chanlist.join(","));
-            }
-        };
+        let _ = client.send(irc::proto::command::Command::QUIT(None));
 
         System::current().stop();
     }
