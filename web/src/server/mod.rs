@@ -252,10 +252,6 @@ fn application(state: AppState) -> App<AppState> {
                               res.method(Method::GET).f(statics::app_bundle_css);
                               res.route().f(not_allowed);
                           })
-                          .resource("/app.bundle.js", |res| {
-                              res.method(Method::GET).f(statics::app_bundle_js);
-                              res.route().f(not_allowed);
-                          })
                           .resource("/Roseline.png", |res| {
                               res.method(Method::GET).f(statics::roseline_png);
                               res.route().f(not_allowed);

@@ -15,7 +15,7 @@ path = "../utils"
 tokio = "0"
 vndb = "0"
 
-actix = { git="https://github.com/actix/actix.git" }
+actix = "0.7"
 futures = "0.1"
 
 lazy_static = "1"

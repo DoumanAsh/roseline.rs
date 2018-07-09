@@ -10,8 +10,9 @@ _bin/
 # NPM packages folder.
 node_modules/
 
-# Brunch output folder.
+.cache
 public/
+dist/
 
 # Junk
 *-lock.json

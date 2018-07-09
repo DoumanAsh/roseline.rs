@@ -1,0 +1,31 @@
+.form {
+    text-align: center;
+    width: 60%;
+    margin: auto;
+}
+
+.form__caption {
+    margin: 0.2em;
+}
+
+.c-table__row {
+    align-items: center;
+}
+
+a.c-table__cell {
+    text-decoration: none;
+    color: inherit;
+
+    &:visited {
+        color: inherit;
+    }
+}
+
+a.action_btn {
+    font-size: .8em;
+}
+
+label.text_label {
+    display: block;
+    padding: 1em 0;
+}

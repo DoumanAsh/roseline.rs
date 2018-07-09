@@ -14,7 +14,7 @@ tokio-io = "0.1"
 tokio-tls = "0.1"
 futures = "0.1"
 
-actix = { git="https://github.com/actix/actix.git" }
+actix = "0.7"
 
 [dependencies.vndb]
 version = "0.5"
