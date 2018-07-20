@@ -7,7 +7,6 @@ extern crate serde_derive;
 
 extern crate utils;
 
-use std::io;
 use std::fmt;
 use std::cmp;
 use std::net;

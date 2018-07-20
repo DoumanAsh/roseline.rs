@@ -13,8 +13,12 @@ use self::actix_web::{
     http,
     Body
 };
-
+use self::actix_web::http::{
+    Method,
+};
 use self::http::header;
+
+use ::templates;
 
 ///Matches given ETag against If-None-Match header.
 ///
@@ -38,7 +42,7 @@ fn if_none_match(etag: &etag::EntityTag, headers: &header::HeaderMap) -> bool {
 }
 
 ///Serves dynamic file using mmap with content disposition as attachment.
-pub fn serve_file_save_as<P: AsRef<path::Path>, S>(path: P, req: &HttpRequest<S>) -> io::Result<HttpResponse> {
+fn serve_file_save_as<P: AsRef<path::Path>, S>(path: P, req: &HttpRequest<S>) -> io::Result<HttpResponse> {
     let path = path.as_ref();
     let file = fs::File::open(&path)?;
 
@@ -67,36 +71,72 @@ pub fn serve_file_save_as<P: AsRef<path::Path>, S>(path: P, req: &HttpRequest<S>
 }
 
 ///Serves static files with max-age 1 week
-pub fn serve<B: Into<Body>>(bytes: B, content_type: &str, encoding: header::ContentEncoding) -> HttpResponse {
+fn serve<B: Into<Body>>(bytes: B, content_type: &str, encoding: header::ContentEncoding) -> HttpResponse {
     HttpResponse::Ok().content_type(content_type)
                       .content_encoding(encoding)
                       .header(header::CACHE_CONTROL, "public, max-age=604800")
                       .body(bytes.into())
 }
 
-pub fn app_bundle_css<S>(_: &HttpRequest<S>) -> HttpResponse {
+fn app_bundle_css<S>(_: &HttpRequest<S>) -> HttpResponse {
     const CSS: &'static [u8] = include_bytes!("../../static/main.css");
     serve(CSS, "text/css; charset=utf-8", header::ContentEncoding::Auto)
 }
 
-//pub fn app_bundle_js<S>(_: &HttpRequest<S>) -> HttpResponse {
+//fn app_bundle_js<S>(_: &HttpRequest<S>) -> HttpResponse {
 //    const JS: &'static [u8] = include_bytes!("../../static/app.bundle.js");
 //    serve(JS, "application/javascript; charset=utf-8", header::ContentEncoding::Auto)
 //}
 
-pub fn roseline_png<S>(_: &HttpRequest<S>) -> HttpResponse {
+fn roseline_png<S>(_: &HttpRequest<S>) -> HttpResponse {
     const IMG: &'static [u8] = include_bytes!("../../static/Roseline.png");
     serve(IMG, "image/png", header::ContentEncoding::Identity)
 }
 
-pub fn favicon<S>(_: &HttpRequest<S>) -> HttpResponse {
+fn favicon<S>(_: &HttpRequest<S>) -> HttpResponse {
     const IMG: &'static [u8] = include_bytes!("../../static/favicon.png");
     serve(IMG, "image/png", header::ContentEncoding::Identity)
 }
 
-pub fn ith_vnr<S>(_: &HttpRequest<S>) -> HttpResponse {
+fn ith_vnr<S>(_: &HttpRequest<S>) -> HttpResponse {
     const ZIP: &'static [u8] = include_bytes!("../../static/ITHVNR.zip");
     serve(ZIP, "application/zip", header::ContentEncoding::Identity)
+}
+
+fn db_dump<S>(req: &HttpRequest<S>) -> actix_web::Either<HttpResponse, templates::InternalError<io::Error>> {
+    extern crate db;
+
+    match serve_file_save_as(db::PATH, &req) {
+        Ok(res) => actix_web::Either::A(res),
+        Err(error) => {
+            error!("Unable to open DB: {}. Error: {}", db::PATH, error);
+            actix_web::Either::B(templates::InternalError::new(error))
+        }
+    }
+}
+
+
+pub fn config<S: 'static>(app: actix_web::App<S>) -> actix_web::App<S> {
+    app.resource("/app.bundle.css", |res| {
+        res.method(Method::GET).f(app_bundle_css);
+        res.route().f(super::not_allowed);
+    }).resource("/Roseline.png", |res| {
+        res.method(Method::GET).f(roseline_png);
+        res.route().f(super::not_allowed);
+    }).resource("/favicon.png", |res| {
+        res.method(Method::GET).f(favicon);
+        res.route().f(super::not_allowed);
+    }).scope("/download", |scope| {
+        scope.resource("/ITHVNR.zip", |res| {
+            res.method(Method::GET).f(ith_vnr);
+            res.route().f(super::not_allowed);
+        }).resource("/roseline.db", |res| {
+            res.method(Method::GET).f(db_dump);
+            res.route().f(super::not_allowed);
+        }).default_resource(|res| {
+            res.route().h(templates::NotFound::new());
+        })
+    })
 }
 
 #[cfg(test)]

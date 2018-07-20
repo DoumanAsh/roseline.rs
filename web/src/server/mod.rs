@@ -31,7 +31,6 @@ use self::actix_web::http::{
 use self::http::Error as HttpError;
 use self::http::header;
 
-use ::io;
 use ::cmp;
 use ::net;
 
@@ -55,7 +54,7 @@ struct AppState {
     pub db: self::actix::Addr<actors::db::Db>,
 }
 
-fn not_allowed<S>(_: &HttpRequest<S>) -> HttpResponse {
+pub fn not_allowed<S>(_: &HttpRequest<S>) -> HttpResponse {
     HttpResponse::MethodNotAllowed().finish()
 }
 
@@ -225,78 +224,39 @@ fn remove_hook_del((query, state): (Form<AddHook>, State<AppState>)) -> FutureHt
     remove_hook(id, version, state)
 }
 
-fn db_dump(req: &HttpRequest<AppState>) -> actix_web::Either<HttpResponse, templates::InternalError<io::Error>> {
-    extern crate db;
-
-    match statics::serve_file_save_as(db::PATH, &req) {
-        Ok(res) => actix_web::Either::A(res),
-        Err(error) => {
-            error!("Unable to open DB: {}. Error: {}", db::PATH, error);
-            actix_web::Either::B(templates::InternalError::new(error))
-        }
-    }
-}
-
 fn application(state: AppState) -> App<AppState> {
     App::with_state(state).middleware(middleware::DefaultHeaders)
                           .middleware(middleware::Logger)
+                          .configure(statics::config)
                           .resource("/", |res| {
                               res.method(Method::GET).h(templates::Index::new("/search", "Search AGTH Hook"));
                               res.route().f(not_allowed);
-                          })
-                          .resource("/vndb", |res| {
+                          }).resource("/vndb", |res| {
                               res.method(Method::GET).h(templates::Index::new("/vndb/search", "Search VNDB"));
                               res.route().f(not_allowed);
-                          })
-                          .resource("/app.bundle.css", |res| {
-                              res.method(Method::GET).f(statics::app_bundle_css);
-                              res.route().f(not_allowed);
-                          })
-                          .resource("/Roseline.png", |res| {
-                              res.method(Method::GET).f(statics::roseline_png);
-                              res.route().f(not_allowed);
-                          })
-                          .resource("/favicon.png", |res| {
-                              res.method(Method::GET).f(statics::favicon);
-                              res.route().f(not_allowed);
                           }).resource("/search", |res| {
-                              res.method(Method::GET).with(search);
+                              res.method(Method::GET).with_async(search);
                               res.route().f(not_allowed);
-                          })
-                          .resource("/vndb/search", |res| {
-                              res.method(Method::GET).with(search_vndb);
+                          }).resource("/vndb/search", |res| {
+                              res.method(Method::GET).with_async(search_vndb);
                               res.route().f(not_allowed);
-                          })
-                          .resource("/add_hook", |res| {
+                          }).resource("/add_hook", |res| {
                               res.method(Method::GET).with(add_hook_get);
-                              res.method(Method::POST).with(add_hook_post);
+                              res.method(Method::POST).with_async(add_hook_post);
                               res.route().f(not_allowed);
-                          })
-                          .resource("/remove_hook", |res| {
-                              res.method(Method::GET).with(remove_hook_get);
-                              res.method(Method::DELETE).with(remove_hook_del);
+                          }).resource("/remove_hook", |res| {
+                              res.method(Method::GET).with_async(remove_hook_get);
+                              res.method(Method::DELETE).with_async(remove_hook_del);
                               res.route().f(not_allowed);
-                          })
-                          .resource("/vn/{id:[0-9]+}", |res| {
-                              res.method(Method::GET).with(vn);
+                          }).resource("/vn/{id:[0-9]+}", |res| {
+                              res.method(Method::GET).with_async(vn);
                               res.route().f(not_allowed);
                           }).resource("/about", |res| {
                               res.method(Method::GET).h(templates::About::new());
                               res.route().f(not_allowed);
-                          }).scope("/download", |scope| {
-                              scope.resource("/ITHVNR.zip", |res| {
-                                  res.method(Method::GET).f(statics::ith_vnr);
-                                  res.route().f(not_allowed);
-                              }).resource("/roseline.db", |res| {
-                                  res.method(Method::GET).f(db_dump);
-                                  res.route().f(not_allowed);
-                              }).default_resource(|res| {
-                                  res.route().h(templates::NotFound::new());
-                              })
                           }).default_resource(|res| {
                               res.route().h(templates::NotFound::new());
                           })
-
 }
 
 pub fn start() {
