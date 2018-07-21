@@ -11,7 +11,7 @@ matrix:
   include:
     - os: linux
       rust: stable
-      env: TARGET=x86_64-unknown-linux-gnu
+      env: TARGET=x86_64-unknown-linux-musl
       cache: cargo
     - os: linux
       rust: stable
