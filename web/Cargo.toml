@@ -27,7 +27,7 @@ num_cpus = "1"
 
 askama = "0"
 
-vndb = "0"
+vndb = "0.6"
 
 memmap = "0.6"
 http = "0"

@@ -9,15 +9,12 @@ readme = "README.md"
 path = "../db"
 
 [dependencies]
-tokio-core = "0.1"
-tokio-io = "0.1"
-tokio-tls = "0.1"
 futures = "0.1"
 
 actix = "0.7"
 
 [dependencies.vndb]
-version = "0.5"
+version = "0.6"
 default-features = false
 features = ["tokio-client"]
 

@@ -12,8 +12,8 @@ path = "../actors"
 path = "../utils"
 
 [dependencies]
-tokio = "0"
-vndb = "0"
+tokio = "0.1"
+vndb = "0.6"
 
 actix = "0.7"
 futures = "0.1"
