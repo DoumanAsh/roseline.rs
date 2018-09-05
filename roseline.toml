@@ -1,0 +1,25 @@
+nickname = "Roseline"
+alt_nicks = [
+    "Roseline_",
+    "Roseline__"
+]
+username = "Roseline"
+realname = "Roseline"
+server = "irc.rizon.net"
+port = 6697
+#password = ""
+use_ssl = true
+encoding = "UTF-8"
+channels = []
+#umodes = "+RB-x"
+user_info = "I'm here to serve you VN related stuff"
+ping_time = 180
+ping_timeout = 10
+
+#[channel_keys]
+#"#fake" = "password"
+
+#[options]
+#note = "anything you want can be in here!"
+#and = "you can use it to build your own additional configuration options."
+#key = "value"
