@@ -9,7 +9,7 @@ use self::args::shell_split;
 use self::vndb::protocol::message::request::get::Type as VndbRequestType;
 use ::fmt::Display;
 
-pub const HELP: &'static str = "Available commands: .ping, .vn, .hook, .set_hook, .del_hook, .del_vn";
+pub const HELP: &'static str = "Available commands: .ping, .vn, .hook, .set_hook, .del_hook, .del_vn, .kouryaku";
 pub const SET_HOOK_USAGE: &'static str = "Usage: <title> <version> <code>";
 pub const DEL_HOOK_USAGE: &'static str = "Usage: <title> <version>";
 
@@ -76,6 +76,11 @@ pub struct DelVn {
     pub title: String
 }
 
+//.kouryaku
+pub struct Kouryaku {
+    pub title: String
+}
+
 pub enum Command {
     Text(Text),
     GetVn(GetVn),
@@ -83,6 +88,7 @@ pub enum Command {
     SetHook(SetHook),
     DelHook(DelHook),
     DelVn(DelVn),
+    Kouryaku(Kouryaku),
     Refs(Refs),
     Ignore(String),
     IgnoreList,
@@ -167,6 +173,10 @@ impl Command {
                 },
                 Some("del_vn") => match captures.get(ARG_IDX) {
                     Some(arg) => Some(Command::DelVn(DelVn{ title: arg.as_str().trim().to_string()})),
+                    None => Some(Command::Text("For which VN...?".into()))
+                },
+                Some("kouryaku") => match captures.get(ARG_IDX) {
+                    Some(arg) => Some(Command::Kouryaku(Kouryaku{ title: arg.as_str().trim().to_string()})),
                     None => Some(Command::Text("For which VN...?".into()))
                 },
                 Some("set_hook") => {

@@ -7,6 +7,7 @@ extern crate actix;
 
 extern crate utils;
 extern crate actors;
+extern crate http;
 
 use actix::{Supervisor, Actor};
 
@@ -21,6 +22,8 @@ mod discord;
 
 fn run() -> Result<i32, String> {
     utils::ssl::init();
+    http::init();
+
     let _log_guard = utils::log::init();
 
     let config = config::load()?;
@@ -30,9 +33,11 @@ fn run() -> Result<i32, String> {
     let executor2 = executor.clone();
     let _irc: actix::Addr<_> = Supervisor::start(move |_| irc::Irc::new(config, executor2));
 
+    let kouryaku = actix::System::current().registry().get::<http::kouryaku::Kouryaku>();
+
     thread::spawn(move || {
         loop {
-            let mut client = discord::client(executor.clone());
+            let mut client = discord::client(executor.clone(), kouryaku.clone());
             if let Err(why) = client.start() {
                 println!("An error occurred while running the client: {:?}", why);
             }

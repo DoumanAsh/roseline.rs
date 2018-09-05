@@ -21,6 +21,7 @@ use self::utils::duration;
 
 use ::collections::HashSet;
 
+use ::http;
 use ::config::Config;
 use ::command;
 
@@ -104,6 +105,7 @@ impl StreamHandler<IrcMessage, IrcError> for Irc {
                     command::Command::SetHook(set_hook) => ctx.notify(SetHookResponse::new(target, from, is_pm, set_hook)),
                     command::Command::DelHook(del_hook) => ctx.notify(DelHookResponse::new(target, from, is_pm, del_hook)),
                     command::Command::DelVn(del_vn) => ctx.notify(DelVnResponse::new(target, from, is_pm, del_vn)),
+                    command::Command::Kouryaku(kouryaku) => ctx.notify(KouryakuVnResponse::new(target, from, is_pm, kouryaku)),
                     command::Command::Ignore(name) => match self.ignores.contains(&name) {
                         true => {
                             let text = format!("Removed '{}' from ignore list", name);
@@ -318,6 +320,35 @@ impl Handler<DelVnResponse> for Irc {
         Ok(())
     }
 }
+
+//.Kouryaku
+type KouryakuVnResponse = GetIrcResponse<command::Kouryaku>;
+impl Handler<KouryakuVnResponse> for Irc {
+    type Result = <KouryakuVnResponse as Message>::Result;
+
+    fn handle(&mut self, msg: KouryakuVnResponse, ctx: &mut Self::Context) -> Self::Result {
+        let KouryakuVnResponse {target, from, is_pm, cmd} = msg;
+        let title = cmd.title;
+
+        let find = http::kouryaku::Find(title);
+        let find = System::current().registry()
+                                    .get::<http::kouryaku::Kouryaku>()
+                                    .send(find)
+                                    .into_actor(self)
+                                    .map(move |result, _act, ctx| match result {
+                                        Ok(Some((title, url))) => ctx.notify(TextResponse::new(target, from, is_pm, format!("{} - {}", title, url).into())),
+                                        Ok(None) => ctx.notify(TextResponse::new(target, from, is_pm, "Unable to find kouryaku".into())),
+                                        Err(error) => ctx.notify(TextResponse::new(target, from, is_pm, format!("{}", error).into())),
+                                    }).map_err(|error, _act, _ctx| {
+                                        error!("IRC: error processing Kouryaku: {}", error);
+                                    });
+
+        ctx.spawn(find);
+
+        Ok(())
+    }
+}
+
 
 //References
 type GetRefResponse = GetIrcResponse<command::Ref>;

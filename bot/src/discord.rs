@@ -18,10 +18,15 @@ use self::serenity::model::channel::Message;
 use self::futures::Future;
 
 use ::command;
+use ::http::kouryaku::Kouryaku;
 
 struct CommandHandler;
 impl typemap::Key for CommandHandler {
     type Value = actix::Addr<actors::exec::Executor>;
+}
+struct KouryakuHandler;
+impl typemap::Key for KouryakuHandler {
+    type Value = actix::Addr<Kouryaku>;
 }
 
 struct Handler;
@@ -39,13 +44,14 @@ impl EventHandler for Handler {
     }
 }
 
-pub fn client(executor: actix::Addr<actors::exec::Executor>) -> Client {
+pub fn client(executor: actix::Addr<actors::exec::Executor>, kouryaku_addr: actix::Addr<Kouryaku>) -> Client {
     let token = include_str!("../discord.token");
     // Login with a bot token from the environment
     let mut client = Client::new(token, Handler).expect("Error creating client");
     {
         let mut data = client.data.lock();
         data.insert::<CommandHandler>(executor);
+        data.insert::<KouryakuHandler>(kouryaku_addr);
     }
 
     let framework = StandardFramework::new().configure(|c| c.prefix(".").ignore_bots(true).case_insensitivity(true).allow_dm(true))
@@ -65,7 +71,8 @@ pub fn client(executor: actix::Addr<actors::exec::Executor>) -> Client {
                                                       .usage(command::SET_HOOK_USAGE)
                                                       .exec(set_hook)
                                             })
-                                            .command("del_vn", |config| config.desc("Remove VN").exec(del_vn));
+                                            .command("del_vn", |config| config.desc("Remove VN").exec(del_vn))
+                                            .command("kouryaku", |config| config.desc("Find walkthrough for VN").exec(kouryaku));
 
     client.with_framework(framework);
 
@@ -189,8 +196,7 @@ fn del_hook(context: &mut Context, message: &Message, args: Args) -> Result<(), 
 fn del_vn(context: &mut Context, message: &Message, args: Args) -> Result<(), CommandError> {
     if args.is_empty() {
         message.reply("For which VN?")?;
-    }
-    else {
+    } else {
         let executor = {
             let data = context.data.lock();
             data.get::<CommandHandler>().unwrap().clone()
@@ -207,5 +213,26 @@ fn del_vn(context: &mut Context, message: &Message, args: Args) -> Result<(), Co
     }
 
     Ok(())
+}
 
+fn kouryaku(context: &mut Context, message: &Message, args: Args) -> Result<(), CommandError> {
+    if args.is_empty() {
+        message.reply("For which VN?")?;
+    } else {
+        let kouryaku = {
+            let data = context.data.lock();
+            data.get::<KouryakuHandler>().unwrap().clone()
+        };
+
+        let find = ::http::kouryaku::Find(args.full().to_string());
+        let result = kouryaku.send(find).wait().map_err(|error| CommandError(format!("{}", error)))?;
+
+        match result {
+            Ok(Some((title, url))) => message.reply(&format!("{} - {}", title, url))?,
+            Ok(None) => message.reply("Unable to find kouryaku")?,
+            Err(error) => message.reply(&format!("{}", error))?,
+        };
+    }
+
+    Ok(())
 }

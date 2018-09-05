@@ -1,0 +1,19 @@
+[package]
+name = "http"
+version = "0.1.0"
+authors = ["Douman <douman@gmx.se>"]
+license = "Apache-2.0"
+readme = "README.md"
+
+[dependencies]
+actix = "0.7"
+regex = "1"
+
+[dependencies.yukikaze]
+version = "0.2"
+default-features = false
+features = ["rt", "flate2-c", "encoding"]
+
+[dependencies.log]
+version = "0"
+default-features = false

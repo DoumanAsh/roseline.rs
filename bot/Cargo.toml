@@ -5,6 +5,9 @@ authors = ["Douman <douman@gmx.se>"]
 license = "Apache-2.0"
 readme = "README.md"
 
+[dependencies.http]
+path = "../http"
+
 [dependencies.actors]
 path = "../actors"
 

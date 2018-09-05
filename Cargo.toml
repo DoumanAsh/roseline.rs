@@ -1,11 +1,12 @@
 [workspace]
 members = [
-    "db",
     "utils",
+    "db",
+    "http",
+    "actors",
     "bot",
     "web",
     "launcher",
-    "actors"
 ]
 
 [profile.release]
