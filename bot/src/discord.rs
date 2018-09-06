@@ -72,7 +72,7 @@ pub fn client(executor: actix::Addr<actors::exec::Executor>, kouryaku_addr: acti
                                                       .exec(set_hook)
                                             })
                                             .command("del_vn", |config| config.desc("Remove VN").exec(del_vn))
-                                            .command("kouryaku", |config| config.desc("Find walkthrough for VN").exec(kouryaku));
+                                            .command("kouryaku", |config| config.desc("Find walkthrough for VN").exec(kouryaku).known_as("walk").known_as("k"));
 
     client.with_framework(framework);
 

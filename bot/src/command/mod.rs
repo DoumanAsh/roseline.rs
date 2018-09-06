@@ -175,7 +175,7 @@ impl Command {
                     Some(arg) => Some(Command::DelVn(DelVn{ title: arg.as_str().trim().to_string()})),
                     None => Some(Command::Text("For which VN...?".into()))
                 },
-                Some("kouryaku") => match captures.get(ARG_IDX) {
+                Some("k") | Some("walk") | Some("kouryaku") => match captures.get(ARG_IDX) {
                     Some(arg) => Some(Command::Kouryaku(Kouryaku{ title: arg.as_str().trim().to_string()})),
                     None => Some(Command::Text("For which VN...?".into()))
                 },
