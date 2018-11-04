@@ -22,12 +22,11 @@
         "blaze": "3"
     },
     "devDependencies": {
-        "parcel-bundler": "1",
         "autoprefixer": "8",
-        "@babel/core": "^7.0.0-beta.52",
-        "@babel/preset-env": "^7.0.0-beta.52",
+        "babel-preset-env": "^1.7.0",
         "eslint": "4",
         "eslint-plugin-compat": "2",
+        "parcel-bundler": ">=1.10",
         "postcss-import": "11",
         "postcss-nesting": "6",
         "pug": "2",
